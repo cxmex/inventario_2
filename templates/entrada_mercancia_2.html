@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Entrada de Mercancía</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .container {
+            padding: 20px 0;
+        }
+        .card {
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            border: none;
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        .card-header {
+            background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+            color: white;
+            border-radius: 15px 15px 0 0 !important;
+            padding: 20px;
+        }
+        .form-control, .form-select {
+            border-radius: 10px;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s ease;
+            font-size: 1.1em;
+            padding: 12px 15px;
+        }
+        .form-control:focus, .form-select:focus {
+            border-color: #4CAF50;
+            box-shadow: 0 0 0 0.2rem rgba(76, 175, 80, 0.25);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #4CAF50 0%, #2E7D32 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 12px 30px;
+            font-weight: 600;
+            font-size: 1.1em;
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(76, 175, 80, 0.4);
+        }
+        .btn-secondary {
+            background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 12px 30px;
+            font-weight: 600;
+        }
+        .input-group {
+            margin-bottom: 20px;
+        }
+        .input-group-text {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 2px solid #e9ecef;
+            border-radius: 10px 0 0 10px;
+            font-weight: 600;
+        }
+        .recent-entry {
+            background: rgba(76, 175, 80, 0.1);
+            border-radius: 8px;
+            padding: 10px 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #4CAF50;
+        }
+        .loading {
+            display: none;
+        }
+        .barcode-input {
+            font-family: 'Courier New', monospace;
+            font-weight: bold;
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            .card-header {
+                padding: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-8">
+                <div class="card">
+                    <div class="card-header text-center">
+                        <h2 class="mb-0">
+                            <i class="fas fa-boxes me-2"></i>
+                            Entrada de Mercancía
+                        </h2>
+                        <p class="mb-0 mt-2 opacity-75">Registro de nuevos productos</p>
+                    </div>
+                    <div class="card-body">
+                        <form id="entradaForm" method="POST" action="/entradamercancia">
+                            
+                            <!-- Quantity Input -->
+                            <div class="input-group mb-4">
+                                <span class="input-group-text">
+                                    <i class="fas fa-hashtag me-2"></i>Cantidad
+                                </span>
+                                <input type="number" 
+                                       class="form-control" 
+                                       id="qtyInput"
+                                       name="qty" 
+                                       min="1" 
+                                       value="1"
+                                       required
+                                       placeholder="Ingrese la cantidad">
+                            </div>
+
+                            <!-- Barcode Input -->
+                            <div class="input-group mb-4">
+                                <span class="input-group-text">
+                                    <i class="fas fa-barcode me-2"></i>Código
+                                </span>
+                                <input type="text" 
+                                       class="form-control barcode-input" 
+                                       id="barcodeInput"
+                                       name="barcode" 
+                                       required
+                                       placeholder="Escanee o ingrese el código de barras"
+                                       autofocus>
+                            </div>
+
+                            <!-- Submit Button -->
+                            <div class="text-center mb-4">
+                                <button type="submit" class="btn btn-primary btn-lg me-3">
+                                    <i class="fas fa-plus me-2"></i>
+                                    <span class="btn-text">Registrar Entrada</span>
+                                    <span class="loading">
+                                        <i class="fas fa-spinner fa-spin me-2"></i>Registrando...
+                                    </span>
+                                </button>
+                                <button type="button" class="btn btn-secondary" onclick="clearForm()">
+                                    <i class="fas fa-trash me-2"></i>Limpiar
+                                </button>
+                            </div>
+                        </form>
+
+                        <!-- Recent Entries Section -->
+                        <div class="mt-4">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h5><i class="fas fa-history me-2"></i>Entradas Recientes</h5>
+                                <button class="btn btn-outline-success btn-sm" onclick="loadRecentEntries()">
+                                    <i class="fas fa-refresh me-1"></i>Actualizar
+                                </button>
+                            </div>
+                            <div id="recentEntries">
+                                <div class="text-center text-muted">
+                                    <i class="fas fa-spinner fa-spin me-2"></i>Cargando entradas recientes...
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Success/Error Messages -->
+    <div class="position-fixed top-0 end-0 p-3" style="z-index: 1050">
+        <div id="alertContainer"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function showAlert(message, type = 'success') {
+            const alertContainer = document.getElementById('alertContainer');
+            const alert = document.createElement('div');
+            alert.className = `alert alert-${type} alert-dismissible fade show`;
+            alert.innerHTML = `
+                ${message}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            `;
+            alertContainer.appendChild(alert);
+            
+            setTimeout(() => {
+                alert.remove();
+            }, 5000);
+        }
+
+        function clearForm() {
+            document.getElementById('qtyInput').value = '1';
+            document.getElementById('barcodeInput').value = '';
+            document.getElementById('barcodeInput').focus();
+        }
+
+        function loadRecentEntries() {
+            console.log('Loading recent entries...');
+            
+            const container = document.getElementById('recentEntries');
+            container.innerHTML = '<div class="text-center text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Cargando...</div>';
+            
+            fetch('/entradamercancia2/recientes')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.entries.length > 0) {
+                        let html = '';
+                        data.entries.forEach(entry => {
+                            const fecha = new Date(entry.created_at).toLocaleString('es-ES');
+                            const productName = entry.name || 'Producto no identificado';
+                            
+                            html += `
+                                <div class="recent-entry">
+                                    <div class="row align-items-center">
+                                        <div class="col-md-8">
+                                            <strong>Qty: ${entry.qty}</strong> - ${productName}
+                                            <br><small class="text-muted">Código: ${entry.barcode}</small>
+                                        </div>
+                                        <div class="col-md-4 text-end">
+                                            <small class="text-muted">${fecha}</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            `;
+                        });
+                        container.innerHTML = html;
+                    } else if (data.entries.length === 0) {
+                        container.innerHTML = '<div class="text-center text-muted">No hay entradas registradas</div>';
+                    } else {
+                        container.innerHTML = '<div class="text-center text-danger">Error al cargar entradas recientes</div>';
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading recent entries:', error);
+                    container.innerHTML = '<div class="text-center text-danger">Error de conexión</div>';
+                });
+        }
+
+        // Form submission handling
+        document.getElementById('entradaForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            console.log('Form submitted');
+            
+            const formData = new FormData(this);
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const btnText = submitBtn.querySelector('.btn-text');
+            const loading = submitBtn.querySelector('.loading');
+            
+            // Show loading state
+            btnText.style.display = 'none';
+            loading.style.display = 'inline';
+            submitBtn.disabled = true;
+            
+            console.log('Sending form data:', {
+                qty: formData.get('qty'),
+                barcode: formData.get('barcode')
+            });
+            
+            fetch('/entradamercancia2', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Response received:', data);
+                
+                if (data.success) {
+                    showAlert(`¡Éxito! Entrada registrada: ${data.qty}x ${data.product_name}`, 'success');
+                    
+                    // Clear form and reload recent entries
+                    clearForm();
+                    loadRecentEntries();
+                    
+                } else {
+                    showAlert(`Error: ${data.message}`, 'danger');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showAlert(`Error de conexión: ${error.message}`, 'danger');
+            })
+            .finally(() => {
+                // Reset button state
+                btnText.style.display = 'inline';
+                loading.style.display = 'none';
+                submitBtn.disabled = false;
+            });
+        });
+
+        // Load recent entries on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadRecentEntries();
+        });
+
+        // Focus barcode input on Enter key from quantity input
+        document.getElementById('qtyInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('barcodeInput').focus();
+            }
+        });
+
+        // Auto-submit on Enter key from barcode input (for barcode scanners)
+        document.getElementById('barcodeInput').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                document.getElementById('entradaForm').dispatchEvent(new Event('submit'));
+            }
+        });
+    </script>
+</body>
+</html>

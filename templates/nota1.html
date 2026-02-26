@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Nota - Test</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .row { display: flex; gap: 10px; margin: 10px 0; align-items: center; }
+    .btn { padding: 8px 15px; border: 1px solid #ccc; background: #f5f5f5; cursor: pointer; }
+    input[type="text"] { padding: 8px; width: 300px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    .loyalty-row { background-color: #e8f5e9; }
+    .discount-row { background-color: #fff3e0; }
+    .status { margin-left: 10px; color: #666; }
+    .error { color: red; }
+    .success { color: green; }
+    .qty-counter { 
+      background: #2196f3; 
+      color: white; 
+      padding: 15px 20px; 
+      border-radius: 8px; 
+      display: inline-block;
+      margin: 10px 0;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .discount-badge {
+      background: #4caf50;
+      color: white;
+      padding: 5px 10px;
+      border-radius: 4px;
+      font-size: 14px;
+      margin-left: 10px;
+    }
+    .total-section {
+      background: #f5f5f5;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>Nota - Test Version</h1>
+  
+  <div class="qty-counter">
+    Total Piezas: <span id="total-qty">0</span>
+    <span id="discount-badge"></span>
+  </div>
+  
+  <div class="row">
+    <input id="barcode" type="text" placeholder="Escanea o ingresa código..." autofocus />
+    <button id="btn-add" class="btn">Buscar</button>
+    <span id="status" class="status"></span>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Cantidad</th>
+        <th>Producto</th>
+        <th>Código</th>
+        <th>Precio</th>
+        <th>Subtotal</th>
+        <th>Acción</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+    <tfoot>
+      <tr>
+        <td colspan="4"><strong>SUBTOTAL</strong></td>
+        <td id="subtotal"><strong>$0</strong></td>
+        <td></td>
+      </tr>
+      <tr id="discount-row" style="display: none;">
+        <td colspan="4"><strong>DESCUENTO</strong></td>
+        <td id="discount-amount" style="color: #4caf50;"><strong>-$0</strong></td>
+        <td></td>
+      </tr>
+      <tr class="total-section">
+        <td colspan="4"><strong>TOTAL</strong></td>
+        <td id="total"><strong>$0</strong></td>
+        <td></td>
+      </tr>
+    </tfoot>
+  </table>
+
+  <div class="row">
+    <button id="btn-save" class="btn">Guardar Venta</button>
+    <span id="save-msg" class="status"></span>
+  </div>
+
+  <div style="background: #f0f0f0; padding: 15px; border-radius: 8px; margin: 10px 0;">
+    <strong>Método de Pago:</strong>
+    <label style="margin-left: 15px;">
+      <input type="radio" name="payment-method" value="efectivo" checked> 💵 Efectivo
+    </label>
+    <label style="margin-left: 15px;">
+      <input type="radio" name="payment-method" value="transferencia"> 💳 Transferencia
+    </label>
+  </div>
+
+  <script>
+    const barcodeInput = document.getElementById('barcode');
+    const statusEl = document.getElementById('status');
+    const tbody = document.getElementById('tbody');
+    const totalQtyEl = document.getElementById('total-qty');
+    const subtotalEl = document.getElementById('subtotal');
+    const discountRow = document.getElementById('discount-row');
+    const discountAmountEl = document.getElementById('discount-amount');
+    const totalEl = document.getElementById('total');
+    const discountBadge = document.getElementById('discount-badge');
+    const addBtn = document.getElementById('btn-add');
+    const saveBtn = document.getElementById('btn-save');
+    const saveMsg = document.getElementById('save-msg');
+
+    function fmt(n) { 
+      return '$' + Math.round(Number(n || 0));
+    }
+
+    function getDiscountPerPiece(totalQty) {
+      if (totalQty > 100) return 10;
+      if (totalQty > 50) return 5;
+      return 0;
+    }
+
+    function recalcTotal() {
+      let subtotalBeforeDiscount = 0;
+      let totalQty = 0;
+      
+      const rows = [];
+      tbody.querySelectorAll('tr').forEach(tr => {
+        const qtyInput = tr.querySelector('.qty');
+        const priceInput = tr.querySelector('.price');
+        const qty = parseInt(qtyInput.value || 0);
+        const originalPrice = Math.round(parseFloat(priceInput.getAttribute('data-original-price') || priceInput.value || 0));
+        
+        rows.push({ tr, qtyInput, priceInput, qty, originalPrice });
+        subtotalBeforeDiscount += qty * originalPrice;
+        totalQty += qty;
+      });
+      
+      totalQtyEl.textContent = totalQty;
+      
+      const discountPerPiece = getDiscountPerPiece(totalQty);
+      
+      if (discountPerPiece > 0) {
+        rows.forEach(({ tr, priceInput, qty, originalPrice }) => {
+          const discountedPrice = Math.max(0, originalPrice - discountPerPiece);
+          priceInput.value = Math.round(discountedPrice);
+          tr.querySelector('.subtotal').textContent = fmt(qty * discountedPrice);
+        });
+      } else {
+        rows.forEach(({ tr, priceInput, qty, originalPrice }) => {
+          priceInput.value = Math.round(originalPrice);
+          tr.querySelector('.subtotal').textContent = fmt(qty * originalPrice);
+        });
+      }
+      
+      let subtotalAfterDiscount = 0;
+      tbody.querySelectorAll('tr').forEach(tr => {
+        const qty = parseInt(tr.querySelector('.qty').value || 0);
+        const price = parseFloat(tr.querySelector('.price').value || 0);
+        subtotalAfterDiscount += qty * price;
+      });
+      
+      const totalDiscountAmount = discountPerPiece > 0 ? (totalQty * discountPerPiece) : 0;
+      
+      subtotalEl.innerHTML = '<strong>' + fmt(subtotalBeforeDiscount) + '</strong>';
+      
+      if (discountPerPiece > 0) {
+        discountRow.style.display = 'table-row';
+        discountAmountEl.innerHTML = '<strong>-' + fmt(totalDiscountAmount) + '</strong>';
+        discountBadge.innerHTML = `<span class="discount-badge">-$${discountPerPiece} por pieza!</span>`;
+      } else {
+        discountRow.style.display = 'none';
+        discountBadge.innerHTML = '';
+      }
+      
+      totalEl.innerHTML = '<strong>' + fmt(subtotalAfterDiscount) + '</strong>';
+    }
+
+    function addProductRow(data) {
+      const tr = document.createElement('tr');
+      
+      const isLoyalty = data.is_loyalty || false;
+      const isDiscount = data.price < 0;
+      
+      if (isLoyalty) {
+        tr.className = isDiscount ? 'discount-row' : 'loyalty-row';
+        if (data.customer_email) {
+          tr.setAttribute('data-customer-email', data.customer_email);
+        }
+      }
+      
+      const originalPrice = Math.round(data.price || 0);
+      
+      tr.innerHTML = `
+        <td><input type="number" class="qty" value="1" min="1" style="width:60px" ${isLoyalty ? 'readonly' : ''}></td>
+        <td><input type="text" class="name" value="${data.name || ''}" style="width:200px" ${isLoyalty ? 'readonly' : ''}></td>
+        <td class="codigo">${data.codigo || ''}</td>
+        <td><input type="number" class="price" value="${originalPrice}" data-original-price="${originalPrice}" step="1" style="width:80px" ${isLoyalty ? 'readonly' : ''}></td>
+        <td class="subtotal">${fmt(data.price || 0)}</td>
+        <td><button class="btn" onclick="removeRow(this)">Quitar</button></td>
+      `;
+      
+      tbody.appendChild(tr);
+      
+      tr.querySelector('.qty').addEventListener('input', recalcTotal);
+      tr.querySelector('.price').addEventListener('input', function() {
+        this.setAttribute('data-original-price', this.value);
+        recalcTotal();
+      });
+      
+      recalcTotal();
+    }
+
+    function removeRow(btn) {
+      btn.closest('tr').remove();
+      recalcTotal();
+    }
+
+    async function searchBarcode() {
+      const barcode = barcodeInput.value.trim();
+      if (!barcode) return;
+      
+      statusEl.textContent = 'Buscando...';
+      statusEl.className = 'status';
+      
+      try {
+        console.log('Searching for barcode:', barcode);
+        
+        const response = await fetch(`/api/search_barcode?barcode=${encodeURIComponent(barcode)}`);
+        const data = await response.json();
+        
+        console.log('API Response:', data);
+        
+        if (!response.ok) {
+          throw new Error(data.detail || 'Error en la búsqueda');
+        }
+        
+        addProductRow(data);
+        
+        if (data.is_loyalty) {
+          statusEl.textContent = `Cliente: ${data.customer_email} - Saldo: ${fmt(Math.abs(data.price))}`;
+          statusEl.className = 'status success';
+        } else {
+          statusEl.textContent = 'Producto agregado';
+          statusEl.className = 'status success';
+        }
+        
+        barcodeInput.value = '';
+        fetch(`/api/start_camera_capture?barcode=${encodeURIComponent(barcode)}`, {
+          method: 'POST'
+        }).catch(err => console.error('Camera capture error:', err));
+        
+      } catch (error) {
+        console.error('Search error:', error);
+        statusEl.textContent = `Error: ${error.message}`;
+        statusEl.className = 'status error';
+      }
+      
+      setTimeout(() => {
+        if (statusEl.className.includes('success')) {
+          statusEl.textContent = '';
+        }
+      }, 3000);
+    }
+
+    function getProducts() {
+      const products = [];
+      tbody.querySelectorAll('tr').forEach(tr => {
+        const product = {
+          qty: parseInt(tr.querySelector('.qty').value || 0),
+          name: tr.querySelector('.name').value || '',
+          codigo: tr.querySelector('.codigo').textContent.trim(),
+          price: Math.round(parseFloat(tr.querySelector('.price').value || 0))
+        };
+        
+        const customerEmail = tr.getAttribute('data-customer-email');
+        if (customerEmail) {
+          product.customer_email = customerEmail;
+        }
+        
+        products.push(product);
+      });
+      return products;
+    }
+
+    async function saveTransaction() {
+      const products = getProducts();
+      
+      if (products.length === 0) {
+        saveMsg.textContent = 'Agrega productos primero';
+        saveMsg.className = 'status error';
+        return;
+      }
+      
+      const paymentMethod = document.querySelector('input[name="payment-method"]:checked').value;
+      
+      saveBtn.disabled = true;
+      saveMsg.textContent = 'Guardando...';
+      saveMsg.className = 'status';
+      
+      try {
+        console.log('Saving products:', products);
+        console.log('Payment method:', paymentMethod);
+        
+        const response = await fetch('/api/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            products: products,
+            payment_method: paymentMethod 
+          })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || 'Error al guardar');
+        }
+        
+        const blob = await response.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'ticket.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        
+        tbody.innerHTML = '';
+        recalcTotal();
+        
+        saveMsg.textContent = 'Venta guardada y ticket descargado ✅';
+        saveMsg.className = 'status success';
+        
+      } catch (error) {
+        console.error('Save error:', error);
+        saveMsg.textContent = `Error: ${error.message}`;
+        saveMsg.className = 'status error';
+      } finally {
+        saveBtn.disabled = false;
+        setTimeout(() => {
+          if (saveMsg.className.includes('success')) {
+            saveMsg.textContent = '';
+          }
+        }, 3000);
+      }
+    }
+
+    // Event listeners
+    addBtn.addEventListener('click', searchBarcode);
+    barcodeInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        searchBarcode();
+      }
+    });
+    saveBtn.addEventListener('click', saveTransaction);
+
+    // Test buttons for debugging
+    document.body.insertAdjacentHTML('beforeend', `
+      <div style="margin-top: 20px; padding: 10px; background: #f0f0f0; border-radius: 5px;">
+        <h3>Test Buttons</h3>
+        <button class="btn" onclick="testProduct()">Test Product (7000401241135)</button>
+        <button class="btn" onclick="testCustomer()">Test Customer (8000123456780)</button>
+        <div style="margin-top: 10px;">
+          <strong>Debug Info:</strong>
+          <div id="debug" style="font-family: monospace; font-size: 12px; color: #666;"></div>
+        </div>
+      </div>
+    `);
+
+    function testProduct() {
+      barcodeInput.value = '7000401241135';
+      searchBarcode();
+    }
+
+    function testCustomer() {
+      barcodeInput.value = '8000123456780';
+      searchBarcode();
+    }
+
+    async function checkAPI() {
+      try {
+        const response = await fetch('/health');
+        const data = await response.json();
+        document.getElementById('debug').innerHTML = `API Status: ${data.status}`;
+      } catch (error) {
+        document.getElementById('debug').innerHTML = `API Error: ${error.message}`;
+      }
+    }
+
+    checkAPI();
+    fetch('/api/sync_prices')
+      .then(r => r.json())
+      .then(d => console.log('✅ Prices synced:', d.updated))
+      .catch(e => console.error('Sync error:', e));
+  </script>
+</body>
+</html>

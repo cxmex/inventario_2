@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conteo de Efectivo</title>
+  <style>
+    body { 
+      font-family: Arial, sans-serif; 
+      margin: 20px;
+      background: #f5f5f5;
+    }
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      border-bottom: 3px solid #2196f3;
+      padding-bottom: 10px;
+    }
+    .current-time {
+      background: #2196f3;
+      color: white;
+      padding: 15px;
+      border-radius: 8px;
+      margin: 20px 0;
+      text-align: center;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .balance-card {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      padding: 25px;
+      border-radius: 12px;
+      margin: 20px 0;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+    }
+    .balance-label {
+      font-size: 14px;
+      opacity: 0.9;
+      margin-bottom: 5px;
+    }
+    .balance-amount {
+      font-size: 36px;
+      font-weight: bold;
+    }
+    .form-section {
+      background: #f9f9f9;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    .row { 
+      display: flex; 
+      gap: 10px; 
+      margin: 10px 0; 
+      align-items: center; 
+    }
+    .btn { 
+      padding: 10px 20px; 
+      border: none;
+      background: #4caf50; 
+      color: white;
+      cursor: pointer;
+      border-radius: 4px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+    .btn:hover {
+      background: #45a049;
+    }
+    .btn-delete {
+      background: #f44336;
+      padding: 5px 10px;
+      font-size: 12px;
+    }
+    .btn-delete:hover {
+      background: #da190b;
+    }
+    .btn-expense {
+      background: #ff9800;
+    }
+    .btn-expense:hover {
+      background: #f57c00;
+    }
+    input[type="text"], input[type="number"], select { 
+      padding: 10px; 
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 16px;
+    }
+    input[type="text"], select {
+      width: 200px;
+    }
+    input[type="number"] {
+      width: 150px;
+    }
+    table { 
+      width: 100%; 
+      border-collapse: collapse; 
+      margin-top: 20px;
+      background: white;
+    }
+    th, td { 
+      border: 1px solid #ddd; 
+      padding: 12px; 
+      text-align: left; 
+    }
+    th {
+      background: #2196f3;
+      color: white;
+      font-weight: bold;
+    }
+    tr:nth-child(even) {
+      background: #f9f9f9;
+    }
+    tr:hover {
+      background: #f1f1f1;
+    }
+    .status { 
+      margin-left: 10px; 
+      color: #666; 
+    }
+    .error { 
+      color: #f44336; 
+      font-weight: bold;
+    }
+    .success { 
+      color: #4caf50; 
+      font-weight: bold;
+    }
+    .amount-positive {
+      color: #4caf50;
+      font-weight: bold;
+    }
+    .amount-negative {
+      color: #f44336;
+      font-weight: bold;
+    }
+    .amount-neutral {
+      color: #666;
+      font-weight: bold;
+    }
+    .tipo-badge {
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .tipo-inicial {
+      background: #e3f2fd;
+      color: #1976d2;
+    }
+    .tipo-credito {
+      background: #c8e6c9;
+      color: #388e3c;
+    }
+    .tipo-debito {
+      background: #ffccbc;
+      color: #d84315;
+    }
+    .tipo-conteo {
+      background: #fff9c4;
+      color: #f57f17;
+    }
+    .diferencia-positive {
+      color: #4caf50;
+      font-weight: bold;
+    }
+    .diferencia-negative {
+      color: #f44336;
+      font-weight: bold;
+    }
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #999;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>💰 Estado de Cuenta - Efectivo</h1>
+    
+    <div class="current-time">
+      🕐 <span id="current-time"></span>
+    </div>
+
+    <div class="balance-card">
+      <div class="balance-label">Saldo Actual</div>
+      <div class="balance-amount" id="current-balance">$0.00</div>
+    </div>
+
+    <div class="form-section">
+      <h2>Registrar Movimiento</h2>
+      <div class="row">
+        <select id="tipo">
+          <option value="credito">💵 Ingreso (Crédito)</option>
+          <option value="debito">💸 Gasto (Débito)</option>
+          <option value="conteo">📊 Conteo de Caja</option>
+        </select>
+        <input id="nombre" type="text" placeholder="Descripción" />
+        <input id="amount" type="number" placeholder="Monto" step="0.01" />
+        <button id="btn-save" class="btn">💾 Guardar</button>
+        <span id="status" class="status"></span>
+      </div>
+      <div id="conteo-info" style="display: none; margin-top: 10px; padding: 10px; background: #fff3cd; border-radius: 4px; color: #856404;">
+        ℹ️ <strong>Conteo de Caja:</strong> Ingresa el monto real contado. El sistema calculará automáticamente la diferencia con el saldo esperado.
+      </div>
+    </div>
+
+    <h2>📋 Movimientos (Ayer y Hoy)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Fecha/Hora</th>
+          <th>Tipo</th>
+          <th>Descripción</th>
+          <th>Ingreso</th>
+          <th>Gasto</th>
+          <th>Diferencia</th>
+          <th>Saldo</th>
+          <th>Order ID</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const tipoSelect = document.getElementById('tipo');
+    const nombreInput = document.getElementById('nombre');
+    const amountInput = document.getElementById('amount');
+    const statusEl = document.getElementById('status');
+    const tbody = document.getElementById('tbody');
+    const saveBtn = document.getElementById('btn-save');
+    const currentBalanceEl = document.getElementById('current-balance');
+    const currentTimeEl = document.getElementById('current-time');
+
+    function fmt(n) { 
+      return '$' + Number(n || 0).toFixed(2); 
+    }
+
+    function formatDateTime(isoString) {
+      const date = new Date(isoString);
+      const dateStr = date.toLocaleDateString('es-MX', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+      const timeStr = date.toLocaleTimeString('es-MX', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+      return `${dateStr} ${timeStr}`;
+    }
+
+    function updateCurrentTime() {
+      const now = new Date();
+      const timeStr = now.toLocaleString('es-MX', {
+        timeZone: 'America/Mexico_City',
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+      });
+      currentTimeEl.textContent = timeStr;
+    }
+
+    function getTipoBadge(tipo) {
+      const badges = {
+        'inicial': '<span class="tipo-badge tipo-inicial">INICIAL</span>',
+        'credito': '<span class="tipo-badge tipo-credito">💵 INGRESO</span>',
+        'debito': '<span class="tipo-badge tipo-debito">💸 GASTO</span>',
+        'conteo': '<span class="tipo-badge tipo-conteo">📊 CONTEO</span>'
+      };
+      return badges[tipo] || tipo;
+    }
+
+    // Show/hide conteo info when tipo changes
+    tipoSelect.addEventListener('change', () => {
+      const conteoInfo = document.getElementById('conteo-info');
+      if (tipoSelect.value === 'conteo') {
+        conteoInfo.style.display = 'block';
+        nombreInput.placeholder = 'Ej: Conteo de cierre del día';
+        amountInput.placeholder = 'Monto contado físicamente';
+      } else {
+        conteoInfo.style.display = 'none';
+        nombreInput.placeholder = 'Descripción';
+        amountInput.placeholder = 'Monto';
+      }
+    });
+
+    // Update time every second
+    updateCurrentTime();
+    setInterval(updateCurrentTime, 1000);
+
+    async function loadConteos() {
+      try {
+        const response = await fetch('/api/conteo2');
+        if (!response.ok) {
+          throw new Error('Error al cargar datos');
+        }
+        
+        const data = await response.json();
+        
+        tbody.innerHTML = '';
+        
+        if (data.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No hay movimientos aún</td></tr>';
+          currentBalanceEl.textContent = '$0.00';
+          return;
+        }
+        
+        // ⭐ FILTER: Show only yesterday and today
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        
+        const filteredData = data.filter(entry => {
+          const entryDate = new Date(entry.created_at);
+          const entryDay = new Date(entryDate.getFullYear(), entryDate.getMonth(), entryDate.getDate());
+          return entryDay >= yesterday;
+        });
+        
+        if (filteredData.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No hay movimientos de ayer u hoy</td></tr>';
+          // Still show current balance from all data
+          const currentBalance = data[0].balance;
+          currentBalanceEl.textContent = fmt(currentBalance);
+          return;
+        }
+        
+        // Display in reverse (oldest first to show balance progression)
+        const reversedData = [...filteredData].reverse();
+        
+        reversedData.forEach(entry => {
+          const tr = document.createElement('tr');
+          
+          const ingreso = entry.tipo === 'credito' ? fmt(entry.amount) : '-';
+          const gasto = entry.tipo === 'debito' ? fmt(entry.amount) : '-';
+          
+          // Format diferencia
+          let diferenciaHtml = '-';
+          if (entry.diferencia !== null && entry.diferencia !== undefined) {
+            const diff = parseFloat(entry.diferencia);
+            const diffClass = diff >= 0 ? 'diferencia-positive' : 'diferencia-negative';
+            const diffSign = diff >= 0 ? '+' : '';
+            diferenciaHtml = `<span class="${diffClass}">${diffSign}${fmt(diff)}</span>`;
+          }
+          
+          tr.innerHTML = `
+            <td>${entry.id}</td>
+            <td>${formatDateTime(entry.created_at)}</td>
+            <td>${getTipoBadge(entry.tipo)}</td>
+            <td>${entry.nombre}</td>
+            <td class="amount-positive">${ingreso}</td>
+            <td class="amount-negative">${gasto}</td>
+            <td>${diferenciaHtml}</td>
+            <td class="amount-neutral">${fmt(entry.balance)}</td>
+            <td>${entry.order_id || '-'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+        
+        // Current balance is the last entry's balance from ALL data (not filtered)
+        const currentBalance = data[0].balance;
+        currentBalanceEl.textContent = fmt(currentBalance);
+        
+      } catch (error) {
+        console.error('Error loading conteos:', error);
+        statusEl.textContent = 'Error al cargar datos';
+        statusEl.className = 'status error';
+      }
+    }
+
+    async function saveConteo() {
+      const tipo = tipoSelect.value;
+      const nombre = nombreInput.value.trim();
+      const amount = parseFloat(amountInput.value);
+      
+      if (!nombre) {
+        statusEl.textContent = 'Por favor ingresa una descripción';
+        statusEl.className = 'status error';
+        return;
+      }
+      
+      if (!amount || amount <= 0) {
+        statusEl.textContent = 'Por favor ingresa un monto válido';
+        statusEl.className = 'status error';
+        return;
+      }
+      
+      saveBtn.disabled = true;
+      statusEl.textContent = 'Guardando...';
+      statusEl.className = 'status';
+      
+      try {
+        const response = await fetch('/api/conteo2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tipo, nombre, amount })
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.detail || 'Error al guardar');
+        }
+        
+        statusEl.textContent = '✅ Guardado exitosamente';
+        statusEl.className = 'status success';
+        
+        // Clear inputs
+        nombreInput.value = '';
+        amountInput.value = '';
+        nombreInput.focus();
+        
+        // Reload table
+        await loadConteos();
+        
+      } catch (error) {
+        console.error('Save error:', error);
+        statusEl.textContent = `❌ Error: ${error.message}`;
+        statusEl.className = 'status error';
+      } finally {
+        saveBtn.disabled = false;
+        setTimeout(() => {
+          if (statusEl.className.includes('success')) {
+            statusEl.textContent = '';
+          }
+        }, 3000);
+      }
+    }
+
+    // Event listeners
+    saveBtn.addEventListener('click', saveConteo);
+    nombreInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        amountInput.focus();
+      }
+    });
+    amountInput.addEventListener('keypress', (e) => {
+      if (e.key === 'Enter') {
+        saveConteo();
+      }
+    });
+
+    // Load data on page load
+    loadConteos();
+  </script>
+</body>
+</html>
