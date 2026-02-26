@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+requests
+pytz
+reportlab
+qrcode[pil]
+Pillow
+python-multipart
+jinja2
