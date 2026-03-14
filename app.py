@@ -89,6 +89,30 @@ class ConteoEfectivoCreate(BaseModel):
     tipo: str
     amount: float
 
+class TransferenciaRow(BaseModel):
+    id: int
+    created_at: Optional[str] = None
+    fecha: Optional[str] = None
+    hora: Optional[str] = None
+    order_id: Optional[int] = None
+    name: Optional[str] = None
+    name_id: Optional[str] = None
+    estilo: Optional[str] = None
+    estilo_id: Optional[int] = None
+    modelo: Optional[str] = None
+    modelo_id: Optional[int] = None
+    cost: Optional[float] = None
+    price: Optional[float] = None
+    subtotal: Optional[float] = None
+    total: Optional[float] = None
+    cliente: Optional[str] = None
+    id_cliente: Optional[int] = None
+    whatsapp: Optional[str] = None
+    qty: Optional[int] = None
+    marca: Optional[str] = None
+    color: Optional[str] = None
+    payment_method: Optional[str] = None
+
 # ─────────────────────────────────────────────
 # SUPABASE HELPER
 # ─────────────────────────────────────────────
@@ -308,70 +332,95 @@ def _build_receipt_pdf_with_qr(
     items: list, total: float, order_id: int, redemption_token: str
 ) -> io.BytesIO:
     buf = io.BytesIO()
-    width, height = 80 * mm, 200 * mm  # thermal-ish size
+    width = 80 * mm
+    height = 250 * mm
     c = canvas.Canvas(buf, pagesize=(width, height))
 
-    y = height - 10 * mm
+    y = height - 12 * mm
 
-    # Header
-    c.setFont("Helvetica-Bold", 12)
-    c.drawCentredString(width / 2, y, f"TEREX2 — Ticket #{order_id}")
-    y -= 7 * mm
+    # ── Header ────────────────────────────────────────────────────────────
+    c.setFont("Helvetica-Bold", 16)
+    c.drawCentredString(width / 2, y, f"TEREX2")
+    y -= 9 * mm
+
+    c.setFont("Helvetica-Bold", 13)
+    c.drawCentredString(width / 2, y, f"Ticket #{order_id}")
+    y -= 8 * mm
 
     mexico_tz = pytz.timezone("America/Mexico_City")
-    now_str = datetime.now(mexico_tz).strftime("%Y-%m-%d %H:%M")
-    c.setFont("Helvetica", 8)
+    now_str = datetime.now(mexico_tz).strftime("%Y-%m-%d  %H:%M")
+    c.setFont("Helvetica", 10)
     c.drawCentredString(width / 2, y, now_str)
     y -= 8 * mm
 
+    c.setLineWidth(1.2)
     c.line(5 * mm, y, width - 5 * mm, y)
-    y -= 6 * mm
+    y -= 8 * mm
 
-    # Items
-    c.setFont("Helvetica-Bold", 8)
+    # ── Column headers ────────────────────────────────────────────────────
+    c.setFont("Helvetica-Bold", 11)
     c.drawString(5 * mm, y, "Producto")
     c.drawRightString(width - 5 * mm, y, "Subtotal")
-    y -= 5 * mm
-
-    c.setFont("Helvetica", 8)
-    for item in items:
-        line = f"{item['qty']}x {item['name'][:28]}"
-        c.drawString(5 * mm, y, line)
-        c.drawRightString(width - 5 * mm, y, f"${item['subtotal']:.0f}")
-        y -= 5 * mm
-        if y < 40 * mm:
-            c.showPage()
-            y = height - 10 * mm
+    y -= 7 * mm
 
     c.line(5 * mm, y, width - 5 * mm, y)
-    y -= 6 * mm
+    y -= 7 * mm
 
-    # Total
-    c.setFont("Helvetica-Bold", 10)
+    # ── Items ─────────────────────────────────────────────────────────────
+    c.setFont("Helvetica", 11)
+    for item in items:
+        subtotal = item.get("subtotal") or (item["qty"] * item["price"])
+        # Product name line
+        name_str = f"{item['qty']}x  {item['name'][:26]}"
+        c.drawString(5 * mm, y, name_str)
+        c.drawRightString(width - 5 * mm, y, f"${subtotal:.0f}")
+        y -= 7 * mm
+
+        # Price per piece on second line
+        c.setFont("Helvetica", 9)
+        c.setFillColorRGB(0.4, 0.4, 0.4)
+        c.drawString(8 * mm, y, f"@ ${item['price']:.0f} c/u")
+        c.setFillColorRGB(0, 0, 0)
+        c.setFont("Helvetica", 11)
+        y -= 8 * mm
+
+        if y < 50 * mm:
+            c.showPage()
+            y = height - 12 * mm
+
+    # ── Total ─────────────────────────────────────────────────────────────
+    y -= 2 * mm
+    c.setLineWidth(1.2)
+    c.line(5 * mm, y, width - 5 * mm, y)
+    y -= 9 * mm
+
+    c.setFont("Helvetica-Bold", 14)
     c.drawString(5 * mm, y, "TOTAL")
     c.drawRightString(width - 5 * mm, y, f"${total:.0f}")
-    y -= 10 * mm
+    y -= 12 * mm
 
-    # QR code
+    c.line(5 * mm, y, width - 5 * mm, y)
+    y -= 12 * mm
+
+    # ── QR code ───────────────────────────────────────────────────────────
     qr_url = f"https://terex.mx/redeem?token={redemption_token}&order={order_id}"
     qr = qrcode.make(qr_url)
     qr_buf = io.BytesIO()
     qr.save(qr_buf, format="PNG")
     qr_buf.seek(0)
 
-    qr_size = 25 * mm
+    qr_size = 32 * mm
     qr_x = (width - qr_size) / 2
     from reportlab.lib.utils import ImageReader
     c.drawImage(ImageReader(qr_buf), qr_x, y - qr_size, width=qr_size, height=qr_size)
-    y -= qr_size + 4 * mm
+    y -= qr_size + 6 * mm
 
-    c.setFont("Helvetica", 7)
+    c.setFont("Helvetica", 9)
     c.drawCentredString(width / 2, y, "Escanea para puntos de lealtad")
 
     c.save()
     buf.seek(0)
     return buf
-
 
 # ─────────────────────────────────────────────
 # ROUTES
@@ -948,9 +997,45 @@ try:
 except Exception:
     pass
 
-# ─────────────────────────────────────────────
+@app.get("/transferencias", response_class=HTMLResponse)
+async def get_transferencias_page(request: Request):
+    return templates.TemplateResponse("transferencias.html", {"request": request})
+
+@app.get("/api/transferencias2")
+async def get_transferencias2(limit: Optional[int] = 500):
+    """Returns one row per order_id with total = sum(price * qty)"""
+    try:
+        url = (
+            f"{SUPABASE_URL}/rest/v1/ventas_terex2"
+            f"?payment_method=eq.transferencia"
+            f"&select=order_id,price,qty,created_at"
+            f"&order=created_at.desc"
+            f"&limit={limit}"
+        )
+        response = requests.get(url, headers=HEADERS)
+        response.raise_for_status()
+        rows = response.json()
+
+        # Group by order_id, sum price*qty
+        from collections import defaultdict
+        order_map = {}
+        for r in rows:
+            oid = r.get("order_id")
+            price = r.get("price") or 0
+            qty   = r.get("qty")   or 0
+            if oid not in order_map:
+                order_map[oid] = {"order_id": oid, "created_at": r.get("created_at"), "total": 0}
+            order_map[oid]["total"] += price * qty
+
+        # Sort by created_at desc
+        orders = sorted(order_map.values(), key=lambda x: x["created_at"] or "", reverse=True)
+        return orders
+
+    except Exception as e:
+        print(f"Error fetching transferencias2: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 # ENTRYPOINT
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("app:app", host="0.0.0.0", port=8001, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

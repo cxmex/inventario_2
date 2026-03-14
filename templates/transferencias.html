@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Transferencias — Terex2</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0d0f14; --surface: #13161e; --surface2: #1a1e2a; --border: #232836;
+      --accent: #4f8ef7; --green: #22c55e; --yellow: #f59e0b;
+      --text: #e2e8f0; --muted: #64748b;
+      --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    .header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 32px; display: flex; align-items: center; justify-content: space-between;
+      height: 64px; position: sticky; top: 0; z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 14px; }
+    .logo-mark {
+      width: 36px; height: 36px; background: linear-gradient(135deg, #4f8ef7, #7c3aed);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px;
+    }
+    .header-title { font-weight: 700; font-size: 16px; }
+    .header-sub { font-size: 12px; color: var(--muted); font-family: var(--mono); }
+    .live-clock {
+      font-family: var(--mono); font-size: 13px; color: var(--accent);
+      background: rgba(79,142,247,0.08); border: 1px solid rgba(79,142,247,0.2);
+      padding: 6px 14px; border-radius: 6px; letter-spacing: 1px;
+    }
+
+    .main { max-width: 700px; margin: 0 auto; padding: 32px 24px; }
+
+    .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 28px; }
+    .kpi-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 20px 22px; position: relative; overflow: hidden;
+    }
+    .kpi-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+    .kpi-card.blue::before  { background: var(--accent); }
+    .kpi-card.green::before { background: var(--green); }
+    .kpi-card.yellow::before{ background: var(--yellow); }
+    .kpi-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.5px; font-family: var(--mono); margin-bottom: 10px; }
+    .kpi-value { font-size: 28px; font-weight: 700; font-family: var(--mono); line-height: 1; }
+    .kpi-card.blue   .kpi-value { color: var(--accent); }
+    .kpi-card.green  .kpi-value { color: var(--green); }
+    .kpi-card.yellow .kpi-value { color: var(--yellow); }
+
+    .filters-bar {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+      padding: 14px 18px; display: flex; align-items: center; gap: 12px;
+      flex-wrap: wrap; margin-bottom: 18px;
+    }
+    .filter-group { display: flex; align-items: center; gap: 8px; }
+    .filter-label { font-size: 11px; color: var(--muted); font-family: var(--mono); white-space: nowrap; }
+    .filter-input {
+      background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+      padding: 7px 11px; border-radius: 6px; font-size: 13px; outline: none;
+      transition: border-color 0.2s; width: 148px;
+    }
+    .filter-input:focus { border-color: var(--accent); }
+    .btn-filter {
+      background: var(--accent); color: white; border: none; padding: 7px 16px;
+      border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer; transition: opacity 0.2s;
+    }
+    .btn-filter:hover { opacity: 0.85; }
+    .btn-reset {
+      background: transparent; color: var(--muted); border: 1px solid var(--border);
+      padding: 7px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-reset:hover { color: var(--text); border-color: var(--muted); }
+
+    .table-wrapper { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .table-header-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 18px; border-bottom: 1px solid var(--border);
+    }
+    .table-title { font-size: 14px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+    .dot { width: 8px; height: 8px; background: var(--accent); border-radius: 50%; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+    .record-count { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead tr { background: var(--surface2); }
+    th {
+      padding: 11px 20px; text-align: left; font-size: 10px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted);
+      font-family: var(--mono); border-bottom: 1px solid var(--border);
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.15s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    td { padding: 15px 20px; vertical-align: middle; }
+
+    .order-badge {
+      display: inline-flex; align-items: center;
+      background: rgba(79,142,247,0.1); border: 1px solid rgba(79,142,247,0.25);
+      color: var(--accent); padding: 5px 12px; border-radius: 5px;
+      font-family: var(--mono); font-size: 14px; font-weight: 600;
+    }
+    .total-cell { font-family: var(--mono); font-weight: 700; font-size: 18px; color: var(--green); }
+    .date-main { font-family: var(--mono); font-size: 13px; }
+    .date-time { font-family: var(--mono); font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    .state-row td { padding: 60px 20px; text-align: center; }
+    .spinner {
+      display: inline-block; width: 30px; height: 30px;
+      border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 12px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .state-title { font-size: 15px; font-weight: 600; }
+    .state-sub { font-size: 13px; color: var(--muted); margin-top: 4px; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-left">
+      <div class="logo-mark">🏦</div>
+      <div>
+        <div class="header-title">Transferencias</div>
+        <div class="header-sub">terex2 · payment_method = transferencia</div>
+      </div>
+    </div>
+    <div class="live-clock" id="clock">--:--:--</div>
+  </header>
+
+  <main class="main">
+
+    <div class="kpi-row">
+      <div class="kpi-card blue">
+        <div class="kpi-label">Total Periodo</div>
+        <div class="kpi-value" id="kpi-total">$0</div>
+      </div>
+      <div class="kpi-card green">
+        <div class="kpi-label">Hoy</div>
+        <div class="kpi-value" id="kpi-hoy">$0</div>
+      </div>
+      <div class="kpi-card yellow">
+        <div class="kpi-label">Órdenes</div>
+        <div class="kpi-value" id="kpi-orders">0</div>
+      </div>
+    </div>
+
+    <div class="filters-bar">
+      <div class="filter-group">
+        <span class="filter-label">DESDE</span>
+        <input type="date" id="f-from" class="filter-input" />
+      </div>
+      <div class="filter-group">
+        <span class="filter-label">HASTA</span>
+        <input type="date" id="f-to" class="filter-input" />
+      </div>
+      <button class="btn-filter" onclick="applyFilters()">🔍 Filtrar</button>
+      <button class="btn-reset" onclick="resetFilters()">✕ Limpiar</button>
+    </div>
+
+    <div class="table-wrapper">
+      <div class="table-header-bar">
+        <div class="table-title"><div class="dot"></div>Órdenes por Transferencia</div>
+        <span class="record-count" id="record-count">— órdenes</span>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Orden</th>
+            <th>Fecha / Hora</th>
+            <th>Total</th>
+          </tr>
+        </thead>
+        <tbody id="tbody">
+          <tr class="state-row">
+            <td colspan="3">
+              <div class="spinner"></div>
+              <div class="state-title">Cargando...</div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </main>
+
+  <script>
+    let orders = [];
+    let filtered = [];
+
+    function updateClock() {
+      document.getElementById('clock').textContent = new Date().toLocaleTimeString('es-MX', {
+        timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      });
+    }
+    updateClock(); setInterval(updateClock, 1000);
+
+    (function initDates() {
+      const today = new Date();
+      const from = new Date(today); from.setDate(from.getDate() - 30);
+      document.getElementById('f-to').value   = today.toISOString().slice(0,10);
+      document.getElementById('f-from').value = from.toISOString().slice(0,10);
+    })();
+
+    function fmt(n) {
+      return '$' + Number(n||0).toLocaleString('es-MX', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    async function loadData() {
+      try {
+        const res = await fetch('/api/transferencias2');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        orders = await res.json();
+        applyFilters();
+      } catch (err) {
+        document.getElementById('tbody').innerHTML = `
+          <tr class="state-row"><td colspan="3">
+            <div class="state-title">⚠️ Error al cargar</div>
+            <div class="state-sub">${err.message}</div>
+          </td></tr>`;
+      }
+    }
+
+    function applyFilters() {
+      const from = document.getElementById('f-from').value;
+      const to   = document.getElementById('f-to').value;
+      filtered = orders.filter(r => {
+        const d = (r.created_at || '').slice(0, 10);
+        if (from && d < from) return false;
+        if (to   && d > to)   return false;
+        return true;
+      });
+      renderKPIs();
+      renderTable();
+    }
+
+    function resetFilters() {
+      const today = new Date();
+      const from = new Date(today); from.setDate(from.getDate() - 30);
+      document.getElementById('f-to').value   = today.toISOString().slice(0,10);
+      document.getElementById('f-from').value = from.toISOString().slice(0,10);
+      applyFilters();
+    }
+
+    function renderKPIs() {
+      const today = new Date().toISOString().slice(0,10);
+      const total = filtered.reduce((s, r) => s + (r.total || 0), 0);
+      const hoy   = filtered.filter(r => (r.created_at||'').slice(0,10) === today)
+                            .reduce((s, r) => s + (r.total || 0), 0);
+      document.getElementById('kpi-total').textContent  = fmt(total);
+      document.getElementById('kpi-hoy').textContent    = fmt(hoy);
+      document.getElementById('kpi-orders').textContent = filtered.length;
+      document.getElementById('record-count').textContent = `${filtered.length} órdenes`;
+    }
+
+    function renderTable() {
+      const tbody = document.getElementById('tbody');
+      if (filtered.length === 0) {
+        tbody.innerHTML = `<tr class="state-row"><td colspan="3">
+          <div class="state-title">📭 Sin resultados</div>
+          <div class="state-sub">Ajusta el rango de fechas</div>
+        </td></tr>`;
+        return;
+      }
+      tbody.innerHTML = filtered.map(r => {
+        const dt = r.created_at ? new Date(r.created_at) : null;
+        const dateStr = dt ? dt.toLocaleDateString('es-MX', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+        const timeStr = dt ? dt.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit',hour12:false}) : '';
+        return `
+          <tr>
+            <td><span class="order-badge">#${r.order_id}</span></td>
+            <td>
+              <div class="date-main">${dateStr}</div>
+              <div class="date-time">${timeStr}</div>
+            </td>
+            <td class="total-cell">${fmt(r.total)}</td>
+          </tr>`;
+      }).join('');
+    }
+
+    loadData();
+  </script>
+</body>
+</html>
