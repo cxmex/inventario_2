@@ -17,25 +17,15 @@
             margin-bottom: 30px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
-        .app-header h1 {
-            margin: 0;
-            font-size: 1.8rem;
-        }
-        .app-header .store-badge {
-            font-size: 0.9rem;
-            opacity: 0.85;
-            margin-top: 4px;
-        }
+        .app-header h1 { margin: 0; font-size: 1.8rem; }
+        .app-header .store-badge { font-size: 0.9rem; opacity: 0.85; margin-top: 4px; }
+
         .menu-card {
-            border: none;
-            border-radius: 12px;
+            border: none; border-radius: 12px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.12);
             transition: transform 0.2s, box-shadow 0.2s;
-            text-decoration: none;
-            color: inherit;
-            display: block;
-            margin-bottom: 20px;
-            overflow: hidden;
+            text-decoration: none; color: inherit;
+            display: block; margin-bottom: 20px; overflow: hidden;
         }
         .menu-card:hover {
             transform: translateY(-3px);
@@ -43,34 +33,78 @@
             color: inherit;
         }
         .menu-card .card-body {
-            padding: 24px 20px;
-            display: flex;
-            align-items: center;
-            gap: 18px;
+            padding: 24px 20px; display: flex; align-items: center; gap: 18px;
         }
-        .menu-icon {
-            font-size: 2.4rem;
-            width: 56px;
-            text-align: center;
-            flex-shrink: 0;
-        }
-        .menu-card h5 {
-            margin: 0 0 4px 0;
-            font-weight: 700;
-            font-size: 1.1rem;
-        }
-        .menu-card p {
-            margin: 0;
-            font-size: 0.85rem;
-            color: #666;
-        }
+        .menu-icon { font-size: 2.4rem; width: 56px; text-align: center; flex-shrink: 0; }
+        .menu-card h5 { margin: 0 0 4px 0; font-weight: 700; font-size: 1.1rem; }
+        .menu-card p  { margin: 0; font-size: 0.85rem; color: #666; }
+
         .card-blue   { border-left: 5px solid #1565C0; }
         .card-green  { border-left: 5px solid #2E7D32; }
         .card-orange { border-left: 5px solid #E65100; }
         .card-purple { border-left: 5px solid #6A1B9A; }
+        .card-red    { border-left: 5px solid #c62828; }
+
+        /* ── PENDIENTES SECTION ── */
+        .section-title {
+            font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+            letter-spacing: 2px; color: #888; margin: 10px 0 14px;
+            display: flex; align-items: center; gap: 10px;
+        }
+        .section-title::after {
+            content: ''; flex: 1; height: 1px; background: #ddd;
+        }
+
+        .pending-header {
+            background: #fff3e0; border: 1px solid #ffcc80;
+            border-radius: 12px; padding: 16px 20px; margin-bottom: 16px;
+            display: flex; align-items: center; justify-content: space-between;
+        }
+        .pending-header-left { display: flex; align-items: center; gap: 12px; }
+        .pending-header h6 { margin: 0; font-weight: 700; color: #e65100; font-size: 1rem; }
+        .pending-header p  { margin: 0; font-size: 0.8rem; color: #bf360c; }
+        .pending-count {
+            background: #e65100; color: white; border-radius: 20px;
+            padding: 4px 12px; font-size: 0.85rem; font-weight: 700;
+            min-width: 36px; text-align: center;
+        }
+
+        .pending-item {
+            display: flex; align-items: center; justify-content: space-between;
+            background: white; border: 1px solid #eee; border-radius: 10px;
+            padding: 14px 16px; margin-bottom: 10px;
+            cursor: pointer; text-decoration: none; color: inherit;
+            transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+        }
+        .pending-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            border-color: #e65100;
+            color: inherit;
+        }
+        .pending-item-left { display: flex; flex-direction: column; gap: 3px; }
+        .pending-name  { font-weight: 700; font-size: 0.95rem; color: #222; }
+        .pending-meta  { font-size: 0.78rem; color: #888; font-family: monospace; }
+        .pending-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+        .pending-qty {
+            background: #ffebee; color: #c62828; border: 1px solid #ef9a9a;
+            border-radius: 6px; padding: 4px 10px;
+            font-size: 0.9rem; font-weight: 700; font-family: monospace;
+            white-space: nowrap;
+        }
+        .pending-arrow { color: #e65100; font-size: 1.1rem; }
+
+        .pending-loading {
+            text-align: center; padding: 30px; color: #aaa; font-size: 0.9rem;
+        }
+        .pending-empty {
+            text-align: center; padding: 30px; color: #4caf50;
+            font-size: 0.9rem; font-weight: 600;
+        }
     </style>
 </head>
 <body>
+
     <header class="app-header">
         <div class="container text-center">
             <h1>🏪 Inventory Management</h1>
@@ -79,8 +113,9 @@
     </header>
 
     <div class="container">
-        <div class="row">
 
+        <!-- ── MENU CARDS ── -->
+        <div class="row">
             <div class="col-md-6">
                 <a href="/nota1" class="menu-card card card-blue">
                     <div class="card-body">
@@ -92,7 +127,6 @@
                     </div>
                 </a>
             </div>
-
             <div class="col-md-6">
                 <a href="/entradamercancia2" class="menu-card card card-green">
                     <div class="card-body">
@@ -104,7 +138,6 @@
                     </div>
                 </a>
             </div>
-
             <div class="col-md-6">
                 <a href="/conteoefectivo" class="menu-card card card-orange">
                     <div class="card-body">
@@ -116,11 +149,10 @@
                     </div>
                 </a>
             </div>
-
             <div class="col-md-6">
                 <a href="/transferencias" class="menu-card card card-purple">
                     <div class="card-body">
-                        <div class="menu-icon">💰</div>
+                        <div class="menu-icon">🏦</div>
                         <div>
                             <h5>Transferencias</h5>
                             <p>Ver y gestionar transferencias de mercancía</p>
@@ -128,10 +160,82 @@
                     </div>
                 </a>
             </div>
-
+            <div class="col-md-6">
+                <a href="/inventoryxbarcode2" class="menu-card card card-purple">
+                    <div class="card-body">
+                        <div class="menu-icon">🔍</div>
+                        <div>
+                            <h5>Verificación Inventario por Código</h5>
+                            <p>Verificar el inventario utilizando códigos de barras</p>
+                        </div>
+                    </div>
+                </a>
+            </div>
         </div>
+
+        <!-- ── PENDIENTES DE CONTAR ── -->
+        <div class="section-title">⚠️ Pendientes de Contar</div>
+
+        <div class="pending-header">
+            <div class="pending-header-left">
+                <span style="font-size:1.8rem">🚨</span>
+                <div>
+                    <h6>Stock Negativo en Terex2</h6>
+                    <p>Haz clic en cualquier producto para verificarlo ahora</p>
+                </div>
+            </div>
+            <span class="pending-count" id="pending-count">...</span>
+        </div>
+
+        <div id="pending-list">
+            <div class="pending-loading">⏳ Cargando pendientes...</div>
+        </div>
+
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        async function loadPendientes() {
+            const listEl  = document.getElementById('pending-list');
+            const countEl = document.getElementById('pending-count');
+            try {
+                const res = await fetch('/api/pendientes2');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const items = await res.json();
+
+                countEl.textContent = items.length;
+
+                if (items.length === 0) {
+                    listEl.innerHTML = '<div class="pending-empty">✅ Sin pendientes — todo el stock es correcto</div>';
+                    return;
+                }
+
+                listEl.innerHTML = items.map(item => {
+                    const name = item.name || item.estilo || '—';
+                    const meta = [item.marca, item.color, item.barcode]
+                        .filter(Boolean).join(' · ');
+                    return `
+                        <a class="pending-item"
+                           href="/inventoryxbarcode2?barcode=${item.barcode}"
+                           title="Clic para verificar ${name}">
+                            <div class="pending-item-left">
+                                <span class="pending-name">${name}</span>
+                                <span class="pending-meta">${meta}</span>
+                            </div>
+                            <div class="pending-right">
+                                <span class="pending-qty">terex2: ${item.terex2}</span>
+                                <span class="pending-arrow">→</span>
+                            </div>
+                        </a>`;
+                }).join('');
+
+            } catch (err) {
+                countEl.textContent = '!';
+                listEl.innerHTML = `<div class="pending-loading" style="color:#f44336">⚠️ Error al cargar: ${err.message}</div>`;
+            }
+        }
+
+        loadPendientes();
+    </script>
 </body>
 </html>

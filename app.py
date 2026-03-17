@@ -1001,39 +1001,99 @@ except Exception:
 async def get_transferencias_page(request: Request):
     return templates.TemplateResponse("transferencias.html", {"request": request})
 
-@app.get("/api/transferencias2")
-async def get_transferencias2(limit: Optional[int] = 500):
-    """Returns one row per order_id with total = sum(price * qty)"""
+
+
+@app.get("/api/pendientes2")
+async def get_pendientes2():
+    """Products in inventario1 where terex2 < 0"""
     try:
         url = (
-            f"{SUPABASE_URL}/rest/v1/ventas_terex2"
-            f"?payment_method=eq.transferencia"
-            f"&select=order_id,price,qty,created_at"
-            f"&order=created_at.desc"
-            f"&limit={limit}"
+            f"{SUPABASE_URL}/rest/v1/inventario1"
+            f"?terex2=lt.0"
+            f"&select=barcode,name,estilo,marca,color,terex2"
+            f"&order=terex2.asc"
+            f"&limit=200"
         )
-        response = requests.get(url, headers=HEADERS)
-        response.raise_for_status()
-        rows = response.json()
-
-        # Group by order_id, sum price*qty
-        from collections import defaultdict
-        order_map = {}
-        for r in rows:
-            oid = r.get("order_id")
-            price = r.get("price") or 0
-            qty   = r.get("qty")   or 0
-            if oid not in order_map:
-                order_map[oid] = {"order_id": oid, "created_at": r.get("created_at"), "total": 0}
-            order_map[oid]["total"] += price * qty
-
-        # Sort by created_at desc
-        orders = sorted(order_map.values(), key=lambda x: x["created_at"] or "", reverse=True)
-        return orders
-
+        resp = requests.get(url, headers=HEADERS)
+        resp.raise_for_status()
+        return resp.json()
     except Exception as e:
-        print(f"Error fetching transferencias2: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+@app.get("/inventoryxbarcode2", response_class=HTMLResponse)
+async def get_inventoryxbarcode2_page(request: Request):
+    return templates.TemplateResponse("inventoryxbarcode2.html", {"request": request})
+
+
+@app.get("/inventoryxbarcode2", response_class=HTMLResponse)
+async def get_inventoryxbarcode2_page(request: Request):
+    return templates.TemplateResponse("inventoryxbarcode2.html", {"request": request})
+
+
+@app.get("/api/inventoryxbarcode2")
+async def get_product_by_barcode2(barcode: str):
+    try:
+        url = (
+            f"{SUPABASE_URL}/rest/v1/inventario1"
+            f"?barcode=eq.{barcode}"
+            f"&select=barcode,name,estilo,estilo_id,marca,color,terex2"
+            f"&limit=1"
+        )
+        resp = requests.get(url, headers=HEADERS)
+        resp.raise_for_status()
+        data = resp.json()
+        if not data:
+            return None
+        product = data[0]
+
+        hist_url = (
+            f"{SUPABASE_URL}/rest/v1/terex2_history"
+            f"?barcode=eq.{barcode}"
+            f"&order=created_at.desc"
+            f"&limit=20"
+        )
+        hist_resp = requests.get(hist_url, headers=HEADERS)
+        hist_resp.raise_for_status()
+        product["history"] = hist_resp.json()
+
+        return product
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.patch("/api/inventoryxbarcode2")
+async def update_terex2(payload: dict):
+    try:
+        barcode      = payload.get("barcode")
+        terex2       = payload.get("terex2")
+        qty_before   = payload.get("qty_before", 0)
+        product_name = payload.get("product_name", "")
+
+        if barcode is None or terex2 is None:
+            raise HTTPException(status_code=400, detail="barcode and terex2 required")
+
+        url = f"{SUPABASE_URL}/rest/v1/inventario1?barcode=eq.{barcode}"
+        resp = requests.patch(url, headers=HEADERS, json={"terex2": terex2})
+        resp.raise_for_status()
+
+        matches    = int(qty_before) == int(terex2)
+        difference = int(terex2) - int(qty_before)
+        requests.post(
+            f"{SUPABASE_URL}/rest/v1/terex2_history",
+            headers=HEADERS,
+            json={
+                "barcode":      int(barcode),
+                "product_name": product_name,
+                "qty_before":   int(qty_before),
+                "qty_counted":  int(terex2),
+                "matches":      matches,
+                "difference":   difference,
+            }
+        )
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ENTRYPOINT
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
