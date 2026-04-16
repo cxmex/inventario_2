@@ -809,7 +809,7 @@ async def serve_frontend():
 
 @app.get("/nota1", response_class=HTMLResponse)
 async def nota(request: Request):
-    return templates.TemplateResponse("nota1.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="nota1.html", context={})
 
 
 
@@ -818,9 +818,7 @@ async def get_entrada_mercancia_2_form(request: Request):
     """Render the merchandise entry form for store 2"""
     try:
         print("Loading entrada mercancia 2 form", flush=True)
-        return templates.TemplateResponse("entrada_mercancia_2.html", {
-            "request": request
-        })
+        return templates.TemplateResponse(request=request, name="entrada_mercancia_2.html", context={})
     except Exception as e:
         print(f"Error loading entrada mercancia 2 form: {str(e)}", flush=True)
         raise HTTPException(status_code=500, detail=f"Error loading form: {str(e)}")
@@ -1123,11 +1121,11 @@ async def recalculate_balances2():
 
 @app.get("/conteoefectivo", response_class=HTMLResponse)
 async def get_conteo_efectivo(request: Request):
-    return templates.TemplateResponse("conteo_efectivo2.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="conteo_efectivo2.html", context={})
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index2.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index2.html", context={})
 
 # Register router
 app.include_router(router)
@@ -1140,7 +1138,7 @@ except Exception:
 
 @app.get("/transferencias", response_class=HTMLResponse)
 async def get_transferencias_page(request: Request):
-    return templates.TemplateResponse("transferencias.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="transferencias.html", context={})
 
 
 
@@ -1162,12 +1160,12 @@ async def get_pendientes2():
         raise HTTPException(status_code=500, detail=str(e))
 @app.get("/inventoryxbarcode2", response_class=HTMLResponse)
 async def get_inventoryxbarcode2_page(request: Request):
-    return templates.TemplateResponse("inventoryxbarcode2.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="inventoryxbarcode2.html", context={})
 
 
 @app.get("/inventoryxbarcode2", response_class=HTMLResponse)
 async def get_inventoryxbarcode2_page(request: Request):
-    return templates.TemplateResponse("inventoryxbarcode2.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="inventoryxbarcode2.html", context={})
 
 
 @app.get("/api/inventoryxbarcode2")
