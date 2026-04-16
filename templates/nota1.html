@@ -54,6 +54,12 @@
     <span id="status" class="status"></span>
   </div>
 
+  <div class="row" style="background:#e8f5e9; padding:8px; border-radius:6px; border:1px solid #4caf50;">
+    <label for="cliente-barcode" style="font-weight:bold; color:#2e7d32;">Cliente:</label>
+    <input id="cliente-barcode" type="text" placeholder="Escanea el barcode del cliente aqui" style="width:320px; background:white;" />
+    <span id="cliente-status" class="status"></span>
+  </div>
+
   <table>
     <thead>
       <tr>
@@ -358,6 +364,27 @@
       }
     });
     saveBtn.addEventListener('click', saveTransaction);
+
+    // Cliente input: on Enter/scan, dispatch to main search flow
+    const clienteInput = document.getElementById('cliente-barcode');
+    const clienteStatus = document.getElementById('cliente-status');
+    clienteInput.addEventListener('keypress', (e) => {
+      if (e.key !== 'Enter') return;
+      const val = clienteInput.value.trim();
+      if (!val) return;
+      clienteStatus.textContent = 'Buscando cliente...';
+      clienteStatus.className = 'status';
+      barcodeInput.value = val;
+      searchBarcode().then(() => {
+        clienteStatus.textContent = 'Cliente agregado';
+        clienteStatus.className = 'status success';
+        setTimeout(() => { clienteStatus.textContent = ''; }, 2500);
+      }).catch(() => {
+        clienteStatus.textContent = 'Error';
+        clienteStatus.className = 'status error';
+      });
+      clienteInput.value = '';
+    });
 
     // Test buttons for debugging
     document.body.insertAdjacentHTML('beforeend', `

@@ -1,6 +1,7 @@
 import os
 import io
 import secrets
+import urllib.parse
 import requests
 import pytz
 from datetime import datetime
@@ -18,7 +19,11 @@ templates = Jinja2Templates(directory="templates")
 # PDF / QR
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.pdfgen import canvas
+from reportlab.lib import colors
 from reportlab.lib.units import mm
+from reportlab.graphics.barcode.qr import QrCodeWidget
+from reportlab.graphics.shapes import Drawing
+from reportlab.graphics import renderPDF
 import qrcode
 
 # ─────────────────────────────────────────────
@@ -221,50 +226,7 @@ async def process_loyalty_deduction(p_dict: dict, order_id: int, fecha: str, hor
         "new_balance": new_balance,
     }
 
-@app.get("/api/search_barcode")
-async def api_search_barcode(barcode: str):
-    """Enhanced barcode search that handles both products and loyalty barcodes"""
-    
-    # Check if this is a customer loyalty barcode (starts with 8000)
-    if barcode.startswith('8000') and len(barcode) == 13:
-        return await handle_loyalty_barcode(barcode)
-    
-    # Handle regular product barcode search
-    rows = await supabase_request(
-        method="GET",
-        endpoint="/rest/v1/inventario1",
-        params={"select": "*", "barcode": f"eq.{barcode}", "limit": 1}
-    )
-    if not rows:
-        raise HTTPException(status_code=404, detail="Producto no encontrado")
-
-    row = rows[0]
-    name = row.get("name") or row.get("modelo") or ""
-    price = float(row.get("precio") or 0.0)
-    send_telegram_message(
-    f"🔍 Código escaneado\n"
-    f"📦 Producto: {name}\n"
-    f"💰 Precio: ${price:.2f}"
-    )
-    return {"name": name, "price": price, "codigo": barcode}
-
-
-@app.get("/api/sync_prices")
-async def sync_prices():
-    """Sync prices from inventario_estilos to inventario1"""
-    try:
-        url = f"{SUPABASE_URL}/rest/v1/rpc/sync_inventario_prices"
-        response = requests.post(url, headers=HEADERS)
-        response.raise_for_status()
-        
-        result = response.json()
-        updated_count = result[0].get('updated_count', 0) if result else 0
-        
-        print(f"✅ Synced {updated_count} prices")
-        return {"success": True, "updated": updated_count}
-    except Exception as e:
-        print(f"❌ Sync error: {e}")
-        return {"success": False, "error": str(e)}
+# (Obsolete duplicate handlers removed — router version below handles CLIENTE + 9000 + 8000)
 
 
 # ─────────────────────────────────────────────
@@ -289,6 +251,119 @@ async def store_redemption_token(order_id: int, token: str, total: float):
         )
     except Exception as e:
         print(f"Could not store redemption token: {e}")
+
+
+# ─────────────────────────────────────────────
+# QR REWARDS (WhatsApp loyalty - 1% on next purchase)
+# ─────────────────────────────────────────────
+async def store_qr_reward(order_id: int, token: str, purchase_amount: float) -> None:
+    """Insert a row into qr_rewards so the token can be redeemed later via WhatsApp."""
+    reward_amount = round(purchase_amount * 0.01, 2)
+    try:
+        await supabase_request(
+            method="POST",
+            endpoint="/rest/v1/qr_rewards",
+            json_data={
+                "qr_token": token,
+                "order_id": order_id,
+                "purchase_amount": purchase_amount,
+                "reward_amount": reward_amount,
+                "status": "pending",
+            },
+        )
+        print(f"QR reward stored: order={order_id} reward=${reward_amount}", flush=True)
+    except Exception as e:
+        print(f"ERROR storing qr_reward: {e}", flush=True)
+
+
+# ─────────────────────────────────────────────
+# CUSTOMER BARCODE HANDLING (POS redemption of WhatsApp loyalty)
+# ─────────────────────────────────────────────
+async def handle_customer_qr(phone: str):
+    """Look up all 'linked' qr_rewards for this phone, return aggregated credit as a loyalty row."""
+    try:
+        rewards = await supabase_request(
+            method="GET",
+            endpoint="/rest/v1/qr_rewards",
+            params={
+                "select": "id,reward_amount",
+                "phone_number": f"eq.{phone}",
+                "status": "eq.linked",
+            },
+        )
+        if not rewards:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Cliente {phone} no tiene creditos disponibles.",
+            )
+        total_credit = round(sum(float(r["reward_amount"]) for r in rewards), 2)
+        ids = [r["id"] for r in rewards]
+        return {
+            "name": f"CREDITO CLIENTE ({phone})",
+            "price": -total_credit,
+            "codigo": f"CLIENTE:{phone}",
+            "is_loyalty": True,
+            "customer_phone": phone,
+            "qr_reward_ids": ids,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error looking up customer QR: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def handle_customer_barcode_scan(barcode: str):
+    """POS scanned a 13-digit customer barcode (9000...). Resolve to phone then fetch credits."""
+    try:
+        rows = await supabase_request(
+            method="GET",
+            endpoint="/rest/v1/customers",
+            params={"customer_barcode": f"eq.{barcode}", "select": "id,phone_number", "limit": "1"},
+        )
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"Cliente con barcode {barcode} no encontrado")
+        phone = rows[0]["phone_number"]
+        return await handle_customer_qr(phone)
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error looking up customer by barcode: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def process_cliente_redemption(product_dict: dict, order_id: int) -> None:
+    """Mark all of the customer's 'linked' qr_rewards as 'redeemed' now that they are used in this order."""
+    codigo = product_dict.get("codigo", "")
+    if not codigo.upper().startswith("CLIENTE:"):
+        return
+    phone = codigo.split(":", 1)[1].strip()
+    now_iso = datetime.utcnow().isoformat()
+
+    try:
+        rewards = await supabase_request(
+            method="GET",
+            endpoint="/rest/v1/qr_rewards",
+            params={
+                "select": "id",
+                "phone_number": f"eq.{phone}",
+                "status": "eq.linked",
+            },
+        )
+        for r in rewards:
+            rid = r.get("id")
+            await supabase_request(
+                method="PATCH",
+                endpoint=f"/rest/v1/qr_rewards?id=eq.{rid}",
+                json_data={
+                    "status": "redeemed",
+                    "redeemed_at": now_iso,
+                    "redeemed_order_id": order_id,
+                },
+            )
+        print(f"Redeemed {len(rewards) if rewards else 0} qr_rewards for phone {phone} -> order {order_id}", flush=True)
+    except Exception as e:
+        print(f"ERROR redeeming customer credits: {e}", flush=True)
 
 
 # ─────────────────────────────────────────────
@@ -331,93 +406,138 @@ async def send_telegram_picture(barcode: str = None, order_id: int = None):
 def _build_receipt_pdf_with_qr(
     items: list, total: float, order_id: int, redemption_token: str
 ) -> io.BytesIO:
-    buf = io.BytesIO()
+    """PDF receipt for thermal printer (80mm paper), dynamic height so whole ticket
+    fits on ONE page. QR code links to WhatsApp with a CANJEAR:<token> prefilled
+    message that triggers the 1% loyalty reward flow.
+    """
     width = 80 * mm
-    height = 250 * mm
-    c = canvas.Canvas(buf, pagesize=(width, height))
+    margin = 3 * mm
 
-    y = height - 12 * mm
+    total_pieces = sum(int(it.get("qty", 0)) for it in items)
+
+    # Dynamic height
+    header_h   = 28 * mm
+    item_h     = 9 * mm
+    totals_h   = 18 * mm
+    qr_block_h = 62 * mm
+    height = header_h + (len(items) * item_h) + totals_h + qr_block_h + 2 * margin
+
+    reward_amount = round(total * 0.01, 2)
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=(width, height))
+    y = height - margin
 
     # ── Header ────────────────────────────────────────────────────────────
-    c.setFont("Helvetica-Bold", 16)
-    c.drawCentredString(width / 2, y, f"TEREX2")
-    y -= 9 * mm
+    c.setFont("Helvetica-Bold", 14)
+    c.drawCentredString(width / 2, y, "TEREX2")
+    y -= 14
 
-    c.setFont("Helvetica-Bold", 13)
+    c.setFont("Helvetica-Bold", 11)
     c.drawCentredString(width / 2, y, f"Ticket #{order_id}")
-    y -= 8 * mm
+    y -= 13
 
     mexico_tz = pytz.timezone("America/Mexico_City")
-    now_str = datetime.now(mexico_tz).strftime("%Y-%m-%d  %H:%M")
-    c.setFont("Helvetica", 10)
-    c.drawCentredString(width / 2, y, now_str)
-    y -= 8 * mm
+    now = datetime.now(mexico_tz)
+    fecha = now.strftime("%Y-%m-%d")
+    hora = now.strftime("%H:%M:%S")
+    c.setFont("Helvetica", 9)
+    c.drawCentredString(width / 2, y, f"{fecha}  {hora}")
+    y -= 10
 
-    c.setLineWidth(1.2)
-    c.line(5 * mm, y, width - 5 * mm, y)
-    y -= 8 * mm
+    c.setLineWidth(0.5)
+    c.line(margin, y, width - margin, y)
+    y -= 10
 
-    # ── Column headers ────────────────────────────────────────────────────
-    c.setFont("Helvetica-Bold", 11)
-    c.drawString(5 * mm, y, "Producto")
-    c.drawRightString(width - 5 * mm, y, "Subtotal")
-    y -= 7 * mm
-
-    c.line(5 * mm, y, width - 5 * mm, y)
-    y -= 7 * mm
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(margin, y, "Producto")
+    c.drawRightString(width - margin, y, "Subtotal")
+    y -= 10
+    c.line(margin, y + 4, width - margin, y + 4)
 
     # ── Items ─────────────────────────────────────────────────────────────
-    c.setFont("Helvetica", 11)
-    for item in items:
-        subtotal = item.get("subtotal") or (item["qty"] * item["price"])
-        # Product name line
-        name_str = f"{item['qty']}x  {item['name'][:26]}"
-        c.drawString(5 * mm, y, name_str)
-        c.drawRightString(width - 5 * mm, y, f"${subtotal:.0f}")
-        y -= 7 * mm
+    c.setFont("Helvetica", 9)
+    name_max_chars = 32
 
-        # Price per piece on second line
+    for it in items:
+        qty = int(it.get("qty", 0))
+        name = str(it.get("name", ""))
+        price = float(it.get("price", 0) or 0)
+        sub = float(it.get("subtotal", qty * price) or 0)
+        display_name = name if len(name) <= name_max_chars else name[:name_max_chars - 1] + "…"
+
         c.setFont("Helvetica", 9)
-        c.setFillColorRGB(0.4, 0.4, 0.4)
-        c.drawString(8 * mm, y, f"@ ${item['price']:.0f} c/u")
-        c.setFillColorRGB(0, 0, 0)
-        c.setFont("Helvetica", 11)
-        y -= 8 * mm
+        c.drawString(margin, y, f"{qty}x  {display_name}")
+        y -= 10
 
-        if y < 50 * mm:
-            c.showPage()
-            y = height - 12 * mm
+        c.setFont("Helvetica", 8)
+        c.setFillColor(colors.grey)
+        c.drawString(margin + 10, y, f"@ ${price:0.2f} c/u")
+        c.setFillColor(colors.black)
+        c.drawRightString(width - margin, y, f"${sub:0.2f}")
+        y -= 12
 
-    # ── Total ─────────────────────────────────────────────────────────────
-    y -= 2 * mm
-    c.setLineWidth(1.2)
-    c.line(5 * mm, y, width - 5 * mm, y)
-    y -= 9 * mm
-
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(5 * mm, y, "TOTAL")
-    c.drawRightString(width - 5 * mm, y, f"${total:.0f}")
-    y -= 12 * mm
-
-    c.line(5 * mm, y, width - 5 * mm, y)
-    y -= 12 * mm
-
-    # ── QR code ───────────────────────────────────────────────────────────
-    qr_url = f"https://terex.mx/redeem?token={redemption_token}&order={order_id}"
-    qr = qrcode.make(qr_url)
-    qr_buf = io.BytesIO()
-    qr.save(qr_buf, format="PNG")
-    qr_buf.seek(0)
-
-    qr_size = 32 * mm
-    qr_x = (width - qr_size) / 2
-    from reportlab.lib.utils import ImageReader
-    c.drawImage(ImageReader(qr_buf), qr_x, y - qr_size, width=qr_size, height=qr_size)
-    y -= qr_size + 6 * mm
+    # ── Totals ────────────────────────────────────────────────────────────
+    c.setLineWidth(0.5)
+    c.line(margin, y + 2, width - margin, y + 2)
+    y -= 6
 
     c.setFont("Helvetica", 9)
-    c.drawCentredString(width / 2, y, "Escanea para puntos de lealtad")
+    c.drawString(margin, y, "Total piezas:")
+    c.drawRightString(width - margin, y, f"{total_pieces}")
+    y -= 11
 
+    c.setFont("Helvetica-Bold", 12)
+    c.drawString(margin, y, "TOTAL:")
+    c.drawRightString(width - margin, y, f"${total:0.2f}")
+    y -= 16
+
+    # ── Loyalty QR section ────────────────────────────────────────────────
+    c.setStrokeColor(colors.black)
+    c.setDash(1, 2)
+    c.line(margin, y, width - margin, y)
+    c.setDash()
+    y -= 12
+
+    c.setFont("Helvetica-Bold", 9)
+    c.drawCentredString(width / 2, y, "ESCANEA ESTE QR CODE Y OBTEN")
+    y -= 10
+    c.drawCentredString(width / 2, y, "1% PARA TU SIGUIENTE COMPRA")
+    y -= 10
+
+    c.setFont("Helvetica", 8)
+    c.setFillColor(colors.grey)
+    c.drawCentredString(width / 2, y, f"Credito a obtener: ${reward_amount:0.2f}")
+    c.setFillColor(colors.black)
+    y -= 12
+
+    business_phone = os.environ.get("WHATSAPP_BUSINESS_NUMBER", "525642460019")
+    prefilled = urllib.parse.quote(f"CANJEAR:{redemption_token}")
+    qr_url = f"https://wa.me/{business_phone}?text={prefilled}"
+
+    try:
+        qr_size = 40 * mm
+        qr_widget = QrCodeWidget(qr_url)
+        qr_widget.barWidth = qr_size
+        qr_widget.barHeight = qr_size
+        qr_drawing = Drawing(qr_size, qr_size)
+        qr_drawing.add(qr_widget)
+        x_qr = (width - qr_size) / 2
+        y_qr = y - qr_size
+        renderPDF.draw(qr_drawing, c, x_qr, y_qr)
+        y = y_qr - 8
+    except Exception as e:
+        print(f"QR error: {e}", flush=True)
+        c.setFont("Helvetica", 7)
+        c.drawCentredString(width / 2, y - 10, f"Token: {redemption_token[:20]}...")
+        y -= 20
+
+    c.setFont("Helvetica", 7)
+    c.setFillColor(colors.grey)
+    c.drawCentredString(width / 2, y, "¡Gracias por su compra!")
+    c.setFillColor(colors.black)
+
+    c.showPage()
     c.save()
     buf.seek(0)
     return buf
@@ -449,10 +569,21 @@ async def sync_prices():
 async def search_barcode(barcode: str):
     """
     Returns product data for a barcode.
-    Loyalty barcodes start with 8000 (13 digits).
+    - CLIENTE:<phone>  → WhatsApp customer credit (text-form)
+    - 9000... 13-digit → WhatsApp customer barcode
+    - 8000... 13-digit → legacy loyalty card
     """
     if not barcode:
         raise HTTPException(status_code=400, detail="Barcode requerido")
+
+    # ── Customer text code (from CLIENTE: prefix) ─────────────────────────
+    if barcode.upper().startswith("CLIENTE:"):
+        phone = barcode.split(":", 1)[1].strip()
+        return await handle_customer_qr(phone)
+
+    # ── Customer barcode (WhatsApp-generated Code128/EAN-13) ──────────────
+    if barcode.startswith("9000") and len(barcode) == 13 and barcode.isdigit():
+        return await handle_customer_barcode_scan(barcode)
 
     # ── Loyalty card ──────────────────────────────────────────────────────
     if barcode.startswith("8000") and len(barcode) == 13:
@@ -536,6 +667,17 @@ async def api_save(payload: SavePayload):
     for p in payload.products:
         p_dict = p.model_dump() if hasattr(p, "model_dump") else p.dict()
         codigo = p_dict.get("codigo", "")
+
+        # ── Customer WhatsApp credit redemption (CLIENTE: code) ──────────
+        if codigo.upper().startswith("CLIENTE:"):
+            await process_cliente_redemption(p_dict, next_order_id)
+            items_for_ticket.append({
+                "qty": p_dict.get("qty", 1),
+                "name": p_dict.get("name", ""),
+                "price": p_dict.get("price", 0),
+                "subtotal": p_dict.get("qty", 1) * p_dict.get("price", 0),
+            })
+            continue
 
         # ── Loyalty redemption ───────────────────────────────────────────
         if codigo.startswith("8000") and len(codigo) == 13:
@@ -644,6 +786,8 @@ async def api_save(payload: SavePayload):
     # ── Redemption token & PDF ───────────────────────────────────────────
     redemption_token = generate_redemption_token()
     await store_redemption_token(next_order_id, redemption_token, total)
+    # Also store in qr_rewards for the WhatsApp loyalty flow
+    await store_qr_reward(next_order_id, redemption_token, total)
     pdf_buf = _build_receipt_pdf_with_qr(items_for_ticket, total, next_order_id, redemption_token)
 
     filename = f"ticket_{STORE_ID}_{next_order_id}_{int(datetime.now().timestamp()*1000)}.pdf"
