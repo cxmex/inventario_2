@@ -558,7 +558,7 @@ async def sync_prices():
         rows = await supabase_request(
             method="GET",
             endpoint="/rest/v1/inventario1",
-            params={"select": "barcode,name,price", "limit": "10000"},
+            params={"select": "barcode,name,precio", "limit": "10000"},
         )
         return {"updated": len(rows) if rows else 0}
     except Exception as e:
@@ -609,7 +609,7 @@ async def search_barcode(barcode: str):
         method="GET",
         endpoint="/rest/v1/inventario1",
         params={
-            "select": f"barcode,name,price,{INVENTORY_COL}",
+            "select": f"barcode,name,precio,{INVENTORY_COL}",
             "barcode": f"eq.{barcode}",
             "limit": "1",
         },
@@ -625,7 +625,7 @@ async def search_barcode(barcode: str):
     return {
         "name": product.get("name", ""),
         "codigo": barcode,
-        "price": float(product.get("price") or 0),
+        "price": float(product.get("precio") or 0),
         "is_loyalty": False,
     }
 
