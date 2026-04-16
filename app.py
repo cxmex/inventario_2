@@ -618,10 +618,7 @@ async def search_barcode(barcode: str):
         raise HTTPException(status_code=404, detail=f"Producto {barcode} no encontrado")
 
     product = rows[0]
-    stock = int(product.get(INVENTORY_COL) or 0)
-    if stock <= 0:
-        raise HTTPException(status_code=400, detail=f"Sin stock en {STORE_ID}")
-
+    # Allow sale even when stock is 0 or negative (inventory reconciliation is done manually)
     return {
         "name": product.get("name", ""),
         "codigo": barcode,
