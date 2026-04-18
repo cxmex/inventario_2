@@ -401,28 +401,57 @@ async def send_telegram_picture(barcode: str = None, order_id: int = None):
 
 
 # ─────────────────────────────────────────────
+# TICKET PDF STORAGE
+# ─────────────────────────────────────────────
+TICKET_BUCKET = "tickets"
+
+
+async def upload_ticket_to_storage(order_id: int, pdf_bytes: bytes):
+    """Upload ticket PDF to Supabase Storage bucket 'tickets'."""
+    storage_path = f"{order_id}.pdf"
+    storage_headers = {
+        "apikey": SUPABASE_KEY,
+        "Authorization": f"Bearer {SUPABASE_KEY}",
+    }
+    try:
+        import httpx as _hx
+        async with _hx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{SUPABASE_URL}/storage/v1/object/{TICKET_BUCKET}/{storage_path}",
+                headers={**storage_headers, "Content-Type": "application/pdf"},
+                content=pdf_bytes,
+            )
+            if resp.status_code < 400:
+                print(f"Ticket PDF uploaded: {order_id}.pdf", flush=True)
+            else:
+                print(f"Ticket PDF upload failed: {resp.status_code} {resp.text[:200]}", flush=True)
+    except Exception as e:
+        print(f"Ticket PDF upload error: {e}", flush=True)
+
+
+# ─────────────────────────────────────────────
 # PDF RECEIPT WITH QR
 # ─────────────────────────────────────────────
 def _build_receipt_pdf_with_qr(
-    items: list, total: float, order_id: int, redemption_token: str
+    items: list, total: float, order_id: int, redemption_token: str,
+    show_items: bool = False
 ) -> io.BytesIO:
-    """PDF receipt for thermal printer (80mm paper), dynamic height so whole ticket
-    fits on ONE page. QR code links to WhatsApp with a CANJEAR:<token> prefilled
-    message that triggers the 1% loyalty reward flow.
+    """PDF receipt for 80mm thermal printer.
+    show_items=False  → summary-only (for printing at POS)
+    show_items=True   → full item detail (sent via WhatsApp after QR scan)
     """
     width = 80 * mm
     margin = 3 * mm
 
     total_pieces = sum(int(it.get("qty", 0)) for it in items)
-
-    # Dynamic height
-    header_h   = 28 * mm
-    item_h     = 9 * mm
-    totals_h   = 18 * mm
-    qr_block_h = 62 * mm
-    height = header_h + (len(items) * item_h) + totals_h + qr_block_h + 2 * margin
-
     reward_amount = round(total * 0.01, 2)
+
+    # Height: fixed for summary, dynamic for detailed
+    if show_items:
+        item_h = 9 * mm
+        height = 28 * mm + (len(items) * item_h) + 20 * mm + 30 * mm + 2 * margin
+    else:
+        height = 165 * mm
 
     buf = io.BytesIO()
     c = canvas.Canvas(buf, pagesize=(width, height))
@@ -447,90 +476,99 @@ def _build_receipt_pdf_with_qr(
 
     c.setLineWidth(0.5)
     c.line(margin, y, width - margin, y)
-    y -= 10
+    y -= 12
 
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(margin, y, "Producto")
-    c.drawRightString(width - margin, y, "Subtotal")
-    y -= 10
-    c.line(margin, y + 4, width - margin, y + 4)
-
-    # ── Items ─────────────────────────────────────────────────────────────
-    c.setFont("Helvetica", 9)
-    name_max_chars = 32
-
-    for it in items:
-        qty = int(it.get("qty", 0))
-        name = str(it.get("name", ""))
-        price = float(it.get("price", 0) or 0)
-        sub = float(it.get("subtotal", qty * price) or 0)
-        display_name = name if len(name) <= name_max_chars else name[:name_max_chars - 1] + "…"
+    # ── Items (only when show_items=True) ─────────────────────────────────
+    if show_items:
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(margin, y, "Producto")
+        c.drawRightString(width - margin, y, "Subtotal")
+        y -= 10
+        c.line(margin, y + 4, width - margin, y + 4)
 
         c.setFont("Helvetica", 9)
-        c.drawString(margin, y, f"{qty}x  {display_name}")
-        y -= 10
+        for it in items:
+            qty = int(it.get("qty", 0))
+            name = str(it.get("name", ""))
+            price = float(it.get("price", 0) or 0)
+            sub = float(it.get("subtotal", qty * price) or 0)
+            display_name = name if len(name) <= 32 else name[:31] + "…"
 
-        c.setFont("Helvetica", 8)
-        c.setFillColor(colors.grey)
-        c.drawString(margin + 10, y, f"@ ${price:0.2f} c/u")
-        c.setFillColor(colors.black)
-        c.drawRightString(width - margin, y, f"${sub:0.2f}")
-        y -= 12
+            c.setFont("Helvetica", 9)
+            c.drawString(margin, y, f"{qty}x  {display_name}")
+            y -= 10
+
+            c.setFont("Helvetica", 8)
+            c.setFillColor(colors.grey)
+            c.drawString(margin + 10, y, f"@ ${price:0.2f} c/u")
+            c.setFillColor(colors.black)
+            c.drawRightString(width - margin, y, f"${sub:0.2f}")
+            y -= 12
+
+        c.setLineWidth(0.5)
+        c.line(margin, y + 2, width - margin, y + 2)
+        y -= 6
 
     # ── Totals ────────────────────────────────────────────────────────────
-    c.setLineWidth(0.5)
-    c.line(margin, y + 2, width - margin, y + 2)
-    y -= 6
-
-    c.setFont("Helvetica", 9)
+    c.setFont("Helvetica", 10)
     c.drawString(margin, y, "Total piezas:")
     c.drawRightString(width - margin, y, f"{total_pieces}")
-    y -= 11
+    y -= 13
 
-    c.setFont("Helvetica-Bold", 12)
+    c.setFont("Helvetica-Bold", 13)
     c.drawString(margin, y, "TOTAL:")
     c.drawRightString(width - margin, y, f"${total:0.2f}")
     y -= 16
 
-    # ── Loyalty QR section ────────────────────────────────────────────────
-    c.setStrokeColor(colors.black)
-    c.setDash(1, 2)
-    c.line(margin, y, width - margin, y)
-    c.setDash()
-    y -= 12
+    if not show_items:
+        # ── QR + Loyalty (only on printed summary) ────────────────────────
+        c.setStrokeColor(colors.black)
+        c.setDash(1, 2)
+        c.line(margin, y, width - margin, y)
+        c.setDash()
+        y -= 12
 
-    c.setFont("Helvetica-Bold", 9)
-    c.drawCentredString(width / 2, y, "ESCANEA ESTE QR CODE Y OBTEN")
-    y -= 10
-    c.drawCentredString(width / 2, y, "1% PARA TU SIGUIENTE COMPRA")
-    y -= 10
+        c.setFont("Helvetica-Bold", 9)
+        c.drawCentredString(width / 2, y, "ESCANEA ESTE QR CODE Y OBTEN")
+        y -= 10
+        c.drawCentredString(width / 2, y, "1% PARA TU SIGUIENTE COMPRA")
+        y -= 10
 
-    c.setFont("Helvetica", 8)
-    c.setFillColor(colors.grey)
-    c.drawCentredString(width / 2, y, f"Credito a obtener: ${reward_amount:0.2f}")
-    c.setFillColor(colors.black)
-    y -= 12
+        c.setFont("Helvetica", 8)
+        c.setFillColor(colors.grey)
+        c.drawCentredString(width / 2, y, f"Credito a obtener: ${reward_amount:0.2f}")
+        c.setFillColor(colors.black)
+        y -= 12
 
-    business_phone = os.environ.get("WHATSAPP_BUSINESS_NUMBER", "525642460019")
-    prefilled = urllib.parse.quote(f"CANJEAR:{redemption_token}")
-    qr_url = f"https://wa.me/{business_phone}?text={prefilled}"
+        business_phone = os.environ.get("WHATSAPP_BUSINESS_NUMBER", "525642460019")
+        prefilled = urllib.parse.quote(f"CANJEAR:{redemption_token}")
+        qr_url = f"https://wa.me/{business_phone}?text={prefilled}"
 
-    try:
-        qr_size = 40 * mm
-        qr_widget = QrCodeWidget(qr_url)
-        qr_widget.barWidth = qr_size
-        qr_widget.barHeight = qr_size
-        qr_drawing = Drawing(qr_size, qr_size)
-        qr_drawing.add(qr_widget)
-        x_qr = (width - qr_size) / 2
-        y_qr = y - qr_size
-        renderPDF.draw(qr_drawing, c, x_qr, y_qr)
-        y = y_qr - 8
-    except Exception as e:
-        print(f"QR error: {e}", flush=True)
+        try:
+            qr_size = 40 * mm
+            qr_widget = QrCodeWidget(qr_url)
+            qr_widget.barWidth = qr_size
+            qr_widget.barHeight = qr_size
+            qr_drawing = Drawing(qr_size, qr_size)
+            qr_drawing.add(qr_widget)
+            x_qr = (width - qr_size) / 2
+            y_qr = y - qr_size
+            renderPDF.draw(qr_drawing, c, x_qr, y_qr)
+            y = y_qr - 8
+        except Exception as e:
+            print(f"QR error: {e}", flush=True)
+            c.setFont("Helvetica", 7)
+            c.drawCentredString(width / 2, y - 10, f"Token: {redemption_token[:20]}...")
+            y -= 20
+
         c.setFont("Helvetica", 7)
-        c.drawCentredString(width / 2, y - 10, f"Token: {redemption_token[:20]}...")
-        y -= 20
+        c.setFillColor(colors.grey)
+        c.drawCentredString(width / 2, y, "TAMBIEN PODRA VER EL DETALLE DE SU")
+        y -= 8
+        c.drawCentredString(width / 2, y, "COMPRA, UNA VEZ ESCANEADO EL")
+        y -= 8
+        c.drawCentredString(width / 2, y, "CODIGO QR EN SU WHATSAPP")
+        y -= 10
 
     c.setFont("Helvetica", 7)
     c.setFillColor(colors.grey)
@@ -787,9 +825,14 @@ async def api_save(payload: SavePayload):
     await store_qr_reward(next_order_id, redemption_token, total)
     pdf_buf = _build_receipt_pdf_with_qr(items_for_ticket, total, next_order_id, redemption_token)
 
+    # Upload a copy to the "tickets" storage bucket (non-blocking)
+    pdf_bytes = pdf_buf.read()
+    import asyncio as _asyncio
+    _asyncio.create_task(upload_ticket_to_storage(next_order_id, pdf_bytes))
+
     filename = f"ticket_{STORE_ID}_{next_order_id}_{int(datetime.now().timestamp()*1000)}.pdf"
     return StreamingResponse(
-        pdf_buf,
+        io.BytesIO(pdf_bytes),
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
