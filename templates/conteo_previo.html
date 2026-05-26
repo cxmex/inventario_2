@@ -415,7 +415,7 @@
   async function submitConteo(){
     const caja_numero = parseInt(document.getElementById('caja-num').value||0);
     const fecha  = document.getElementById('caja-fecha').value;
-    const notas  = document.getElementById('caja-notas').value.trim();
+    const notas  = '';
     const items  = getItems();
 
     if(!caja_numero){ alert('Ingresa el número de caja'); document.getElementById('caja-num').focus(); return; }
@@ -458,7 +458,6 @@
 
       // Reset form
       document.getElementById('caja-num').value='';
-      document.getElementById('caja-notas').value='';
       document.getElementById('estilos-container').innerHTML='';
       estiloCount=0; rowCounters={};
       recalc();
