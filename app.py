@@ -1,5 +1,6 @@
 import os
 import io
+import uuid
 import secrets
 import urllib.parse
 import requests
@@ -8,7 +9,7 @@ from datetime import datetime
 from typing import List, Optional
 
 
-from fastapi import FastAPI, HTTPException, APIRouter,Request,Form
+from fastapi import FastAPI, HTTPException, APIRouter, Request, Form, UploadFile, File
 from fastapi.responses import StreamingResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -1272,6 +1273,50 @@ async def update_terex2(payload: dict):
             }
         )
         return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── CHECK BARCODE MOBILE 2 ──────────────────────────────────────────
+@app.get("/check_barcode_mobile2", response_class=HTMLResponse)
+async def check_barcode_mobile2(request: Request):
+    return templates.TemplateResponse(request=request, name="check_barcode_mobile2.html", context={})
+
+
+@app.post("/api/check_barcode_mobile2/photo")
+async def upload_barcode_photo2(
+    barcode: str = Form(...),
+    product_name: str = Form(""),
+    estilo: str = Form(""),
+    estilo_id: str = Form(""),
+    color: str = Form(""),
+    photo: UploadFile = File(...),
+):
+    try:
+        contents = await photo.read()
+        ext = photo.filename.rsplit(".", 1)[-1] if "." in photo.filename else "jpg"
+        now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        uid = str(uuid.uuid4())[:8]
+        storage_path = f"training/{barcode}/{now_str}_{uid}.{ext}"
+
+        upload_url = f"{SUPABASE_URL}/storage/v1/object/barcode-photos/{storage_path}"
+        upload_headers = {**HEADERS, "Content-Type": photo.content_type or "image/jpeg"}
+        upload_resp = requests.post(upload_url, headers=upload_headers, data=contents)
+
+        public_url = f"{SUPABASE_URL}/storage/v1/object/public/barcode-photos/{storage_path}"
+
+        log_data = {
+            "barcode": barcode,
+            "product_name": product_name,
+            "estilo": estilo,
+            "estilo_id": int(estilo_id) if estilo_id.isdigit() else None,
+            "color": color,
+            "file_path": storage_path,
+            "public_url": public_url,
+        }
+        requests.post(f"{SUPABASE_URL}/rest/v1/barcode_photos", headers=HEADERS, json=log_data)
+
+        return {"success": True, "public_url": public_url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

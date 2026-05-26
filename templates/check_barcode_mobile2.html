@@ -1,0 +1,530 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>Check Barcode Mobile — T2</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js"></script>
+  <style>
+    :root {
+      --bg: #0d0f14; --surface: #13161e; --surface2: #1a1e2a; --border: #232836;
+      --accent: #22c55e; --green: #22c55e; --red: #ef4444; --yellow: #f59e0b;
+      --text: #e2e8f0; --muted: #64748b;
+      --mono: 'IBM Plex Mono', monospace; --sans: 'IBM Plex Sans', sans-serif;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--sans); background: var(--bg); color: var(--text); min-height: 100vh; }
+
+    .header {
+      background: var(--surface); border-bottom: 1px solid var(--border);
+      padding: 0 16px; display: flex; align-items: center; justify-content: space-between;
+      height: 56px; position: sticky; top: 0; z-index: 100;
+    }
+    .header-left { display: flex; align-items: center; gap: 10px; }
+    .logo-mark {
+      width: 32px; height: 32px; background: linear-gradient(135deg, #22c55e, #4f8ef7);
+      border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 16px;
+    }
+    .header-title { font-weight: 700; font-size: 14px; }
+    .header-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .branch-badge {
+      font-family: var(--mono); font-size: 11px; font-weight: 700;
+      background: rgba(34,197,94,0.15); color: var(--green);
+      border: 1px solid rgba(34,197,94,0.3); padding: 4px 10px; border-radius: 6px;
+    }
+    .live-clock {
+      font-family: var(--mono); font-size: 12px; color: var(--accent);
+      background: rgba(34,197,94,0.08); border: 1px solid rgba(34,197,94,0.2);
+      padding: 4px 10px; border-radius: 6px;
+    }
+
+    .main { max-width: 500px; margin: 0 auto; padding: 12px 14px 80px; }
+
+    /* SCANNER */
+    .scanner-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; overflow: hidden; margin-bottom: 14px;
+    }
+    .scanner-header {
+      padding: 12px 16px; display: flex; justify-content: space-between; align-items: center;
+    }
+    .scanner-label { font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; font-family: var(--mono); }
+    .scanner-toggle {
+      background: var(--accent); color: white; border: none; padding: 6px 14px;
+      border-radius: 6px; font-size: 12px; font-weight: 700; cursor: pointer;
+    }
+    .scanner-toggle.stop { background: var(--red); }
+    #scanner-viewport {
+      width: 100%; height: 240px; background: #000; position: relative; display: none;
+    }
+    #scanner-video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .scan-line {
+      position: absolute; top: 50%; left: 10%; right: 10%; height: 2px;
+      background: var(--green); box-shadow: 0 0 12px var(--green);
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 0.4; } 50% { opacity: 1; } }
+    .scan-status {
+      text-align: center; padding: 8px; font-size: 12px; color: var(--muted);
+      font-family: var(--mono); background: rgba(0,0,0,0.3);
+    }
+
+    /* INPUT */
+    .input-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px; margin-bottom: 14px;
+    }
+    .field { margin-bottom: 10px; }
+    .field label {
+      display: block; font-size: 10px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 1.2px; font-family: var(--mono); margin-bottom: 5px;
+    }
+    .field input {
+      width: 100%; background: var(--surface2); border: 1px solid var(--border);
+      color: var(--text); padding: 11px 14px; border-radius: 8px;
+      font-size: 20px; font-family: var(--mono); font-weight: 600;
+      outline: none; transition: border-color 0.2s;
+    }
+    .field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34,197,94,0.15); }
+    .field input::placeholder { color: var(--muted); font-weight: 400; font-size: 14px; }
+
+    .barcode-detected {
+      background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3) !important;
+      animation: flashGreen 0.5s;
+    }
+    @keyframes flashGreen { 0% { background: rgba(34,197,94,0.3); } 100% { background: rgba(34,197,94,0.1); } }
+
+    /* PHOTO */
+    .photo-section { margin-bottom: 10px; }
+    .photo-btn {
+      width: 100%; background: var(--surface2); border: 2px dashed var(--border);
+      border-radius: 10px; padding: 18px; text-align: center; cursor: pointer;
+      transition: border-color 0.2s; color: var(--muted); font-size: 13px;
+    }
+    .photo-btn:hover { border-color: var(--accent); color: var(--text); }
+    .photo-btn.has-photo { border-color: var(--green); border-style: solid; }
+    .photo-preview {
+      width: 100%; max-height: 200px; object-fit: cover; border-radius: 8px;
+      margin-top: 8px; display: none;
+    }
+    .photo-input { display: none; }
+
+    .btn-checar {
+      width: 100%; background: var(--accent); color: white; border: none;
+      padding: 14px; border-radius: 10px; font-size: 16px; font-weight: 700;
+      cursor: pointer; letter-spacing: 0.5px; transition: opacity 0.2s; margin-top: 4px;
+    }
+    .btn-checar:hover:not(:disabled) { opacity: 0.88; }
+    .btn-checar:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* RESULT */
+    .result-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 18px; margin-bottom: 14px; animation: fadeIn 0.3s ease;
+    }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:translateY(0); } }
+    .product-name { font-size: 17px; font-weight: 700; margin-bottom: 3px; }
+    .product-meta { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+    .divider { height: 1px; background: var(--border); margin: 14px 0; }
+    .stock-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+    .stock-box {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px; text-align: center;
+    }
+    .stock-box-label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; font-family: var(--mono); margin-bottom: 5px; }
+    .stock-box-value { font-size: 24px; font-weight: 700; font-family: var(--mono); }
+    .stock-box.prev  .stock-box-value { color: var(--yellow); }
+    .stock-box.count .stock-box-value { color: var(--accent); }
+    .stock-box.diff  .stock-box-value { color: var(--green); }
+    .stock-box.diff.neg .stock-box-value { color: var(--red); }
+
+    .verdict { border-radius: 10px; padding: 14px 16px; display: flex; align-items: center; gap: 12px; }
+    .verdict.match   { background: rgba(34,197,94,0.1);  border: 1px solid rgba(34,197,94,0.3); }
+    .verdict.mismatch{ background: rgba(239,68,68,0.1);   border: 1px solid rgba(239,68,68,0.3); }
+    .verdict-icon { font-size: 28px; }
+    .verdict-title { font-size: 16px; font-weight: 700; }
+    .verdict.match    .verdict-title { color: var(--green); }
+    .verdict.mismatch .verdict-title { color: var(--red); }
+    .verdict-sub { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+
+    .photo-status { font-size: 11px; color: var(--green); font-family: var(--mono); margin-top: 8px; text-align: center; }
+
+    /* SESSION */
+    .session-history { margin-top: 8px; }
+    .session-title { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; font-family: var(--mono); margin-bottom: 8px; }
+    .session-item {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 8px 12px; border-radius: 8px; background: var(--surface);
+      border: 1px solid var(--border); margin-bottom: 6px; font-size: 12px;
+    }
+    .session-name { font-weight: 600; font-size: 13px; }
+    .session-barcode { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+    .session-badge { font-family: var(--mono); font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 4px; }
+    .session-badge.ok  { background: rgba(34,197,94,0.15);  color: var(--green); }
+    .session-badge.err { background: rgba(239,68,68,0.15);   color: var(--red); }
+
+    .error-card {
+      background: rgba(239,68,68,0.08); border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 10px; padding: 14px 16px; color: var(--red);
+      font-weight: 600; font-size: 13px; animation: fadeIn 0.3s ease; margin-bottom: 14px;
+    }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+
+  <header class="header">
+    <div class="header-left">
+      <div class="logo-mark">📱</div>
+      <div>
+        <div class="header-title">Check Barcode Mobile</div>
+        <div class="header-sub">scan + photo + count</div>
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <div class="branch-badge">TEREX 2</div>
+      <div class="live-clock" id="clock">--:--</div>
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- SCANNER -->
+    <div class="scanner-card">
+      <div class="scanner-header">
+        <span class="scanner-label">Barcode Scanner</span>
+        <button class="scanner-toggle" id="scanBtn" onclick="toggleScanner()">SCAN</button>
+      </div>
+      <div id="scanner-viewport">
+        <video id="scanner-video" autoplay playsinline muted></video>
+        <canvas id="scanner-canvas" style="display:none"></canvas>
+        <div class="scan-line"></div>
+      </div>
+      <div class="scan-status" id="scanStatus"></div>
+    </div>
+
+    <!-- INPUT -->
+    <div class="input-card">
+      <div class="field">
+        <label>Codigo de Barras</label>
+        <input id="barcode" type="number" placeholder="Escaneado automatico..." />
+      </div>
+      <div class="field">
+        <label>Cantidad Contada — Terex 2</label>
+        <input id="qty" type="number" placeholder="0" min="0" inputmode="numeric" />
+      </div>
+
+      <!-- PHOTO -->
+      <div class="photo-section">
+        <label style="display:block; font-size:10px; font-weight:600; color:var(--muted); text-transform:uppercase; letter-spacing:1.2px; font-family:var(--mono); margin-bottom:5px;">Foto del Producto</label>
+        <div class="photo-btn" id="photoBtn" onclick="document.getElementById('photoInput').click()">
+          📷 Tomar foto del producto
+        </div>
+        <input type="file" accept="image/*" capture="environment" class="photo-input" id="photoInput" onchange="handlePhoto(this)" />
+        <img id="photoPreview" class="photo-preview" />
+      </div>
+
+      <button class="btn-checar" id="btn-checar" onclick="checar()">CHECAR</button>
+    </div>
+
+    <!-- RESULT -->
+    <div id="result"></div>
+
+    <!-- SESSION -->
+    <div id="session-section" class="hidden session-history">
+      <div class="session-title">Verificados esta sesion</div>
+      <div id="session-list"></div>
+    </div>
+
+  </main>
+
+  <script>
+    const barcodeInput = document.getElementById('barcode');
+    const qtyInput     = document.getElementById('qty');
+    const resultEl     = document.getElementById('result');
+    const btn          = document.getElementById('btn-checar');
+    const scanBtn      = document.getElementById('scanBtn');
+    const viewport     = document.getElementById('scanner-viewport');
+    const scanStatus   = document.getElementById('scanStatus');
+    const sessionSection = document.getElementById('session-section');
+    const sessionList  = document.getElementById('session-list');
+
+    let scanning = false;
+    let sessionLog = [];
+    let currentPhoto = null;
+    let videoStream = null;
+    let scanInterval = null;
+    let nativeDetector = null;
+    let zxingReader = null;
+
+    /* Clock */
+    function tick() {
+      document.getElementById('clock').textContent = new Date().toLocaleTimeString('es-MX', {
+        timeZone: 'America/Mexico_City', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+      });
+    }
+    tick(); setInterval(tick, 1000);
+
+    /* Enter navigation */
+    barcodeInput.addEventListener('keypress', e => { if (e.key === 'Enter') qtyInput.focus(); });
+    qtyInput.addEventListener('keypress', e => { if (e.key === 'Enter') checar(); });
+
+    /* ── BARCODE SCANNER ── */
+    function toggleScanner() {
+      if (scanning) { stopScanner(); } else { startScanner(); }
+    }
+
+    async function startScanner() {
+      viewport.style.display = 'block';
+      scanBtn.textContent = 'STOP';
+      scanBtn.classList.add('stop');
+      scanStatus.textContent = 'Iniciando camara...';
+      scanning = true;
+
+      const videoEl = document.getElementById('scanner-video');
+
+      try {
+        videoStream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        videoEl.srcObject = videoStream;
+        await videoEl.play();
+      } catch(err) {
+        scanStatus.textContent = 'Error camara: ' + err.message;
+        stopScanner();
+        return;
+      }
+
+      // Try native BarcodeDetector first (Chrome Android 83+)
+      if ('BarcodeDetector' in window) {
+        scanStatus.textContent = 'Listo — apunta al codigo de barras';
+        try {
+          nativeDetector = new BarcodeDetector({
+            formats: ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'code_93']
+          });
+        } catch(e) {
+          nativeDetector = new BarcodeDetector();
+        }
+        scanInterval = setInterval(async () => {
+          if (!scanning || videoEl.readyState < 2) return;
+          try {
+            const barcodes = await nativeDetector.detect(videoEl);
+            if (barcodes.length > 0) {
+              const code = barcodes[0].rawValue;
+              if (code && code.length >= 6) onBarcodeDetected(code);
+            }
+          } catch(e) {}
+        }, 150);
+
+      // Fallback: ZXing-js
+      } else if (typeof ZXing !== 'undefined') {
+        scanStatus.textContent = 'Listo (ZXing) — apunta al codigo de barras';
+        const hints = new Map();
+        const formats = [
+          ZXing.BarcodeFormat.EAN_13, ZXing.BarcodeFormat.EAN_8,
+          ZXing.BarcodeFormat.UPC_A,  ZXing.BarcodeFormat.UPC_E,
+          ZXing.BarcodeFormat.CODE_128, ZXing.BarcodeFormat.CODE_39
+        ];
+        hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, formats);
+        hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+        zxingReader = new ZXing.MultiFormatReader();
+        zxingReader.setHints(hints);
+
+        const canvas = document.getElementById('scanner-canvas');
+        const ctx = canvas.getContext('2d');
+
+        scanInterval = setInterval(() => {
+          if (!scanning || videoEl.readyState < 2) return;
+          canvas.width  = videoEl.videoWidth  || 640;
+          canvas.height = videoEl.videoHeight || 480;
+          ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+          try {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const lum = new ZXing.RGBLuminanceSource(imgData.data, canvas.width, canvas.height);
+            const bmp = new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(lum));
+            const result = zxingReader.decode(bmp);
+            if (result && result.getText()) onBarcodeDetected(result.getText());
+          } catch(e) { /* NotFoundException is normal */ }
+        }, 200);
+
+      } else {
+        scanStatus.textContent = 'Scanner no disponible — escribe el codigo manualmente';
+      }
+    }
+
+    function onBarcodeDetected(code) {
+      barcodeInput.value = code;
+      barcodeInput.classList.add('barcode-detected');
+      setTimeout(() => barcodeInput.classList.remove('barcode-detected'), 1500);
+      scanStatus.textContent = 'Detectado: ' + code;
+      stopScanner();
+      qtyInput.focus();
+    }
+
+    function stopScanner() {
+      clearInterval(scanInterval);
+      scanInterval = null;
+      nativeDetector = null;
+      zxingReader = null;
+      if (videoStream) {
+        videoStream.getTracks().forEach(t => t.stop());
+        videoStream = null;
+      }
+      const videoEl = document.getElementById('scanner-video');
+      if (videoEl) videoEl.srcObject = null;
+      viewport.style.display = 'none';
+      scanBtn.textContent = 'SCAN';
+      scanBtn.classList.remove('stop');
+      scanning = false;
+    }
+
+    /* ── PHOTO HANDLING ── */
+    function handlePhoto(input) {
+      const file = input.files[0];
+      if (!file) return;
+      currentPhoto = file;
+      const preview = document.getElementById('photoPreview');
+      const btn = document.getElementById('photoBtn');
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = 'block';
+      btn.innerHTML = '📷 Foto capturada - toca para cambiar';
+      btn.classList.add('has-photo');
+    }
+
+    /* ── CHECAR ── */
+    async function checar() {
+      const barcode = barcodeInput.value.trim();
+      const qtyRaw  = qtyInput.value;
+
+      if (!barcode) { showError('Escanea o escribe un codigo'); barcodeInput.focus(); return; }
+      if (qtyRaw === '' || qtyRaw === null) { showError('Ingresa una cantidad (0 es valido)'); qtyInput.focus(); return; }
+
+      const qty = parseInt(qtyRaw);
+      if (isNaN(qty) || qty < 0) { showError('Cantidad invalida'); qtyInput.focus(); return; }
+
+      btn.disabled = true;
+      btn.textContent = 'Buscando...';
+      resultEl.innerHTML = '';
+
+      try {
+        /* 1 - Fetch product (terex2 field) */
+        const fetchRes = await fetch(`/api/inventoryxbarcode2?barcode=${encodeURIComponent(barcode)}`);
+        if (!fetchRes.ok) throw new Error('HTTP ' + fetchRes.status);
+        const product = await fetchRes.json();
+
+        if (!product) {
+          showError('Codigo ' + barcode + ' no encontrado');
+          return;
+        }
+
+        const prevTerex2 = product.terex2 ?? 0;
+        const matches = prevTerex2 === qty;
+        const diff = qty - prevTerex2;
+
+        /* 2 - Update terex2 stock */
+        const updateRes = await fetch('/api/inventoryxbarcode2', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            barcode,
+            terex2: qty,
+            qty_before: prevTerex2,
+            product_name: product.name || product.estilo || barcode
+          })
+        });
+        if (!updateRes.ok) throw new Error('Error al actualizar');
+
+        /* 3 - Upload photo if taken */
+        let photoUploaded = false;
+        if (currentPhoto) {
+          const formData = new FormData();
+          formData.append('barcode', barcode);
+          formData.append('product_name', product.name || '');
+          formData.append('estilo', product.estilo || '');
+          formData.append('estilo_id', product.estilo_id || '');
+          formData.append('color', product.color || '');
+          formData.append('photo', currentPhoto);
+
+          try {
+            const photoRes = await fetch('/api/check_barcode_mobile2/photo', { method: 'POST', body: formData });
+            if (photoRes.ok) photoUploaded = true;
+          } catch(e) { /* photo upload not critical */ }
+        }
+
+        /* 4 - Show result */
+        showResult(product, prevTerex2, qty, matches, diff, photoUploaded);
+
+        /* 5 - Session log */
+        addSessionEntry(barcode, product.name || product.estilo || barcode, prevTerex2, qty, matches, diff);
+
+        /* 6 - Reset */
+        barcodeInput.value = '';
+        qtyInput.value = '';
+        currentPhoto = null;
+        document.getElementById('photoPreview').style.display = 'none';
+        document.getElementById('photoBtn').innerHTML = '📷 Tomar foto del producto';
+        document.getElementById('photoBtn').classList.remove('has-photo');
+        document.getElementById('photoInput').value = '';
+        barcodeInput.focus();
+
+      } catch(err) {
+        showError(err.message);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'CHECAR';
+      }
+    }
+
+    /* ── RESULT ── */
+    function showResult(product, prev, counted, matches, diff, photoUploaded) {
+      const name = product.name || product.estilo || '—';
+      const meta = [product.marca, product.color, product.estilo_id ? 'E' + product.estilo_id : null].filter(Boolean).join(' · ');
+      const diffLabel = diff === 0 ? '0' : (diff > 0 ? '+' + diff : '' + diff);
+      const diffClass = diff < 0 ? 'diff neg' : 'diff';
+      const verdictClass = matches ? 'match' : 'mismatch';
+      const verdictIcon = matches ? '✅' : '❌';
+      const verdictTitle = matches ? 'YES' : 'NO — Dif: ' + diffLabel;
+      const verdictSub = matches ? 'terex2 confirmado en ' + counted : prev + ' → ' + counted;
+      const photoMsg = photoUploaded ? '<div class="photo-status">📷 Foto guardada para ML training</div>' : '';
+
+      resultEl.innerHTML = `
+        <div class="result-card">
+          <div class="product-name">${name}</div>
+          <div class="product-meta">${meta} · ${product.barcode}</div>
+          <div class="divider"></div>
+          <div class="stock-row">
+            <div class="stock-box prev"><div class="stock-box-label">Sistema T2</div><div class="stock-box-value">${prev}</div></div>
+            <div class="stock-box count"><div class="stock-box-label">Contado</div><div class="stock-box-value">${counted}</div></div>
+            <div class="stock-box ${diffClass}"><div class="stock-box-label">Dif</div><div class="stock-box-value">${diffLabel}</div></div>
+          </div>
+          <div class="verdict ${verdictClass}">
+            <div class="verdict-icon">${verdictIcon}</div>
+            <div><div class="verdict-title">${verdictTitle}</div><div class="verdict-sub">${verdictSub}</div></div>
+          </div>
+          ${photoMsg}
+        </div>`;
+    }
+
+    /* ── SESSION LOG ── */
+    function addSessionEntry(barcode, name, prev, counted, matches, diff) {
+      sessionLog.unshift({ barcode, name, prev, counted, matches, diff });
+      if (sessionLog.length > 15) sessionLog.pop();
+
+      sessionList.innerHTML = sessionLog.map(s => {
+        const dl = s.diff === 0 ? '0' : (s.diff > 0 ? '+' + s.diff : '' + s.diff);
+        return `<div class="session-item">
+          <div><div class="session-name">${s.name}</div><div class="session-barcode">${s.barcode} · ${s.prev} → ${s.counted}</div></div>
+          <span class="session-badge ${s.matches ? 'ok' : 'err'}">${s.matches ? 'YES' : dl}</span>
+        </div>`;
+      }).join('');
+
+      sessionSection.className = 'session-history';
+    }
+
+    function showError(msg) {
+      resultEl.innerHTML = `<div class="error-card">${msg}</div>`;
+    }
+  </script>
+</body>
+</html>
