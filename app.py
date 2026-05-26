@@ -1321,6 +1321,177 @@ async def upload_barcode_photo2(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ── CONTEO PREVIO DE MERCANCÍA ─────────────────────────────────────
+@app.get("/conteo-previo", response_class=HTMLResponse)
+async def conteo_previo_page2(request: Request):
+    return templates.TemplateResponse(request=request, name="conteo_previo.html", context={})
+
+
+@app.post("/api/conteo-previo")
+async def save_conteo_previo2(payload: dict):
+    try:
+        caja_numero = int(payload.get("caja_numero", 0))
+        fecha       = payload.get("fecha", datetime.now().strftime("%Y-%m-%d"))
+        notas       = payload.get("notas", "")
+        items       = payload.get("items", [])
+
+        if not caja_numero or not items:
+            return JSONResponse({"error": "caja_numero e items requeridos"}, status_code=400)
+
+        rows = [
+            {
+                "caja_numero": caja_numero,
+                "fecha":       fecha,
+                "estilo":      it.get("estilo", "").strip().upper(),
+                "modelo":      it["modelo"].strip().upper(),
+                "color":       it["color"].strip().upper(),
+                "qty":         int(it["qty"]),
+                "notas":       notas,
+            }
+            for it in items
+            if it.get("modelo") and it.get("color") and int(it.get("qty", 0)) > 0
+        ]
+
+        if not rows:
+            return JSONResponse({"error": "No hay filas validas"}, status_code=400)
+
+        resp = requests.post(
+            f"{SUPABASE_URL}/rest/v1/conteo_previo",
+            headers={**HEADERS, "Prefer": "return=representation"},
+            json=rows,
+        )
+
+        if resp.status_code not in (200, 201):
+            return JSONResponse({"error": resp.text}, status_code=500)
+
+        total = sum(r["qty"] for r in rows)
+
+        from collections import defaultdict, OrderedDict
+        by_estilo = OrderedDict()
+        for r in rows:
+            est = r["estilo"] or "(sin estilo)"
+            if est not in by_estilo:
+                by_estilo[est] = defaultdict(list)
+            by_estilo[est][r["modelo"]].append(r)
+
+        lines = [f"📦 *CAJA {caja_numero}* — {fecha}\n"]
+        for estilo, by_modelo in by_estilo.items():
+            lines.append(f"▸ *{estilo}*")
+            for modelo, its in by_modelo.items():
+                lines.append(f"  {modelo}")
+                for it in its:
+                    lines.append(f"    {it['color']}: {it['qty']}")
+            lines.append("")
+        lines.append(f"TOTAL DE PZS .... {total} ✅")
+
+        receipt = "\n".join(lines)
+        return {"success": True, "total": total, "receipt": receipt, "saved": len(rows)}
+
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/conteo-previo/cajas")
+async def list_conteo_cajas2():
+    try:
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/conteo_previo"
+            "?select=caja_numero,fecha,estilo,modelo,color,qty,reconciled,created_at"
+            "&order=created_at.desc&limit=1000",
+            headers=HEADERS,
+        )
+        rows = resp.json()
+
+        from collections import defaultdict
+        cajas = defaultdict(lambda: {"items": [], "total": 0, "fecha": "", "reconciled": True})
+        for r in rows:
+            c = cajas[r["caja_numero"]]
+            c["items"].append(r)
+            c["total"] += r["qty"]
+            c["fecha"] = r["fecha"]
+            if not r["reconciled"]:
+                c["reconciled"] = False
+
+        return [
+            {"caja_numero": k, "fecha": v["fecha"], "total": v["total"],
+             "reconciled": v["reconciled"], "items": v["items"]}
+            for k, v in sorted(cajas.items(), key=lambda x: x[0], reverse=True)
+        ]
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/conteo-previo/reconcile")
+async def reconcile_caja2(caja_numero: int, fecha_from: str, fecha_to: str):
+    try:
+        r_conteo = requests.get(
+            f"{SUPABASE_URL}/rest/v1/conteo_previo?caja_numero=eq.{caja_numero}&select=modelo,color,qty&order=modelo.asc",
+            headers=HEADERS,
+        )
+        r_e1 = requests.get(
+            f"{SUPABASE_URL}/rest/v1/entrada_mercancia"
+            f"?created_at=gte.{fecha_from}T00:00:00&created_at=lte.{fecha_to}T23:59:59"
+            "&select=estilo,qty&limit=2000",
+            headers=HEADERS,
+        )
+        r_e2 = requests.get(
+            f"{SUPABASE_URL}/rest/v1/entrada_mercancia_2"
+            f"?created_at=gte.{fecha_from}T00:00:00&created_at=lte.{fecha_to}T23:59:59"
+            "&select=estilo,qty&limit=2000",
+            headers=HEADERS,
+        )
+        counted   = r_conteo.json()
+        entradas1 = r_e1.json() if r_e1.status_code == 200 else []
+        entradas2 = r_e2.json() if r_e2.status_code == 200 else []
+        total_counted  = sum(r["qty"] for r in counted)
+        total_entered1 = sum(r["qty"] for r in entradas1)
+        total_entered2 = sum(r["qty"] for r in entradas2)
+        total_entered  = total_entered1 + total_entered2
+        return {
+            "caja_numero": caja_numero, "fecha_from": fecha_from, "fecha_to": fecha_to,
+            "total_counted": total_counted, "total_entered": total_entered,
+            "total_entered1": total_entered1, "total_entered2": total_entered2,
+            "diff": total_entered - total_counted,
+            "counted": counted, "entradas1": entradas1, "entradas2": entradas2,
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.patch("/api/conteo-previo/{caja_numero}/mark-reconciled")
+async def mark_reconciled2(caja_numero: int):
+    try:
+        requests.patch(
+            f"{SUPABASE_URL}/rest/v1/conteo_previo?caja_numero=eq.{caja_numero}",
+            headers=HEADERS,
+            json={"reconciled": True, "reconciled_at": datetime.now().isoformat()},
+        )
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.post("/api/conteo-previo/foto")
+async def upload_conteo_foto2(
+    caja_numero: int = Form(...),
+    estilo: str = Form(""),
+    fecha: str = Form(""),
+    photo: UploadFile = File(...),
+):
+    try:
+        contents = await photo.read()
+        ext = photo.filename.rsplit(".", 1)[-1] if "." in photo.filename else "jpg"
+        now_str = datetime.now().strftime("%Y%m%d_%H%M%S")
+        uid = str(uuid.uuid4())[:8]
+        safe_estilo = estilo.replace(" ", "_").replace("/", "-")[:40]
+        storage_path = f"conteo_previo/caja{caja_numero}/{safe_estilo}_{now_str}_{uid}.{ext}"
+        upload_url = f"{SUPABASE_URL}/storage/v1/object/barcode-photos/{storage_path}"
+        requests.post(upload_url, headers={**HEADERS, "Content-Type": photo.content_type or "image/jpeg"}, data=contents)
+        return {"success": True}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 # ENTRYPOINT
 # ─────────────────────────────────────────────
 if __name__ == "__main__":
