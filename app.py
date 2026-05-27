@@ -1365,6 +1365,21 @@ async def counting_progress_t2():
 
         counted = len(seen_week)
         pct = round(counted / total * 100, 1) if total else 0
+        remaining = max(total - counted, 0)
+        weekday = now.weekday()
+        days_left = max(6 - weekday, 1)
+        import math as _math
+        daily_target = _math.ceil(remaining / days_left) if remaining else 0
+        if weekday >= 5:
+            urgency = "🚨 CRÍTICO"
+        elif weekday == 4 and pct < 90:
+            urgency = "🔴 URGENTE"
+        elif weekday == 3 and pct < 70:
+            urgency = "🟠 ATENCIÓN"
+        elif weekday == 2 and pct < 50:
+            urgency = "🟡 AVISO"
+        else:
+            urgency = "🟢 EN TIEMPO"
         return {
             "branch": "terex2",
             "week_start": monday.strftime("%d/%m/%Y"),
@@ -1373,9 +1388,12 @@ async def counting_progress_t2():
             "total": total,
             "counted": counted,
             "yesterday": len(seen_yesterday),
-            "remaining": max(total - counted, 0),
+            "remaining": remaining,
             "pct": pct,
             "daily": {d: len(s) for d, s in daily.items()},
+            "daily_target": daily_target,
+            "days_left": days_left,
+            "urgency": urgency,
         }
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
