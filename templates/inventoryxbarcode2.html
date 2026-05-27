@@ -347,8 +347,8 @@
 
       const rowsHtml = rows.map((h, idx) => {
         const dt      = h.created_at ? new Date(h.created_at) : null;
-        const dateStr = dt ? dt.toLocaleDateString('es-MX', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
-        const timeStr = dt ? dt.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) : '';
+        const dateStr = dt ? dt.toLocaleDateString('es-MX', {timeZone:'America/Mexico_City',day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+        const timeStr = dt ? dt.toLocaleTimeString('es-MX', {timeZone:'America/Mexico_City',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}) : '';
         const diff    = h.difference ?? (h.qty_counted - h.qty_before);
         const diffLbl = diff === 0 ? '0' : (diff > 0 ? `+${diff}` : `${diff}`);
         const diffColor = diff < 0 ? 'var(--red)' : diff > 0 ? 'var(--yellow)' : 'var(--green)';

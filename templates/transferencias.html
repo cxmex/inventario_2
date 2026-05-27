@@ -266,8 +266,8 @@
       }
       tbody.innerHTML = filtered.map(r => {
         const dt = r.created_at ? new Date(r.created_at) : null;
-        const dateStr = dt ? dt.toLocaleDateString('es-MX', {day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
-        const timeStr = dt ? dt.toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit',hour12:false}) : '';
+        const dateStr = dt ? dt.toLocaleDateString('es-MX', {timeZone:'America/Mexico_City',day:'2-digit',month:'2-digit',year:'numeric'}) : '—';
+        const timeStr = dt ? dt.toLocaleTimeString('es-MX', {timeZone:'America/Mexico_City',hour:'2-digit',minute:'2-digit',hour12:false}) : '';
         return `
           <tr>
             <td><span class="order-badge">#${r.order_id}</span></td>

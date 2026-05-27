@@ -252,11 +252,13 @@
     function formatDateTime(isoString) {
       const date = new Date(isoString);
       const dateStr = date.toLocaleDateString('es-MX', {
+        timeZone: 'America/Mexico_City',
         year: 'numeric',
         month: '2-digit',
         day: '2-digit'
       });
       const timeStr = date.toLocaleTimeString('es-MX', {
+        timeZone: 'America/Mexico_City',
         hour: '2-digit',
         minute: '2-digit',
         second: '2-digit',
