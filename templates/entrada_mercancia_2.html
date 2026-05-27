@@ -315,20 +315,21 @@
                 const res = await fetch('/api/conteo-previo/cajas');
                 if (!res.ok) throw new Error('HTTP ' + res.status);
                 const cajas = await res.json();
-                const pending = cajas.filter(c => !c.reconciled);
-                if (pending.length === 0) {
+                if (!cajas || cajas.length === 0) {
                     const opt = document.createElement('option');
                     opt.value = ''; opt.disabled = true;
-                    opt.textContent = '— Sin cajas pendientes —';
+                    opt.textContent = '— Sin cajas registradas —';
                     sel.appendChild(opt);
                     return;
                 }
-                pending.forEach(c => {
+                // Sort: pending first, then by caja_numero desc
+                cajas.sort((a, b) => (a.reconciled === b.reconciled ? b.caja_numero - a.caja_numero : a.reconciled ? 1 : -1));
+                cajas.forEach(c => {
                     const opt = document.createElement('option');
                     opt.value = c.caja_numero;
                     const fecha = c.fecha || '';
                     const lineas = c.items ? c.items.length : '?';
-                    const status = c.reconciled ? 'VERIFICADO' : 'PENDIENTE';
+                    const status = c.reconciled ? '✅ VERIFICADO' : '⏳ PENDIENTE';
                     opt.textContent = `CAJA ${c.caja_numero} — ${fecha} · ${lineas} líneas · ${c.total} pzas · ${status}`;
                     opt.dataset.items = JSON.stringify(c.items);
                     sel.appendChild(opt);
