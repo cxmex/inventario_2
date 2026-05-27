@@ -136,6 +136,20 @@
                                        autofocus>
                             </div>
 
+                            <!-- Caja de Conteo Previo -->
+                            <div class="mb-4">
+                                <label class="form-label fw-bold">
+                                    <i class="fas fa-boxes me-1"></i>Caja de Conteo Previo
+                                </label>
+                                <select class="form-select" id="conteoPrevioSelect" name="conteo_previo_caja">
+                                    <option value="">— Sin caja asignada —</option>
+                                </select>
+                                <div id="cajaPreviewBox" style="display:none; margin-top:8px; padding:10px 14px;
+                                     background:#fff3e0; border:1px solid #ffcc80; border-radius:8px;
+                                     font-size:0.82rem; color:#5d4037;"></div>
+                                <div id="cajasLoadError" style="display:none; margin-top:6px; font-size:0.8rem; color:#e53935;"></div>
+                            </div>
+
                             <!-- Submit Button -->
                             <div class="text-center mb-4">
                                 <button type="submit" class="btn btn-primary btn-lg me-3">
@@ -293,9 +307,55 @@
             });
         });
 
+        // ── Cajas Conteo Previo ───────────────────────────────────
+        async function loadConteoCajas() {
+            const sel = document.getElementById('conteoPrevioSelect');
+            const errEl = document.getElementById('cajasLoadError');
+            try {
+                const res = await fetch('/api/conteo-previo/cajas');
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                const cajas = await res.json();
+                const pending = cajas.filter(c => !c.reconciled);
+                if (pending.length === 0) {
+                    const opt = document.createElement('option');
+                    opt.value = ''; opt.disabled = true;
+                    opt.textContent = '— Sin cajas pendientes —';
+                    sel.appendChild(opt);
+                    return;
+                }
+                pending.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c.caja_numero;
+                    const fecha = c.fecha ? c.fecha.slice(5).replace('-','/') : '';
+                    opt.textContent = `Caja #${c.caja_numero} — ${fecha} · ${c.total} pzas`;
+                    opt.dataset.items = JSON.stringify(c.items);
+                    sel.appendChild(opt);
+                });
+            } catch(e) {
+                errEl.textContent = 'No se pudieron cargar las cajas: ' + e.message;
+                errEl.style.display = 'block';
+            }
+        }
+
+        document.getElementById('conteoPrevioSelect').addEventListener('change', function() {
+            const preview = document.getElementById('cajaPreviewBox');
+            const opt = this.options[this.selectedIndex];
+            if (!this.value || !opt.dataset.items) { preview.style.display = 'none'; return; }
+            const items = JSON.parse(opt.dataset.items);
+            const byEstilo = {};
+            items.forEach(it => {
+                const key = it.estilo || '(sin estilo)';
+                byEstilo[key] = (byEstilo[key] || 0) + it.qty;
+            });
+            const rows = Object.entries(byEstilo).map(([e,q]) => `<b>${e}</b>: ${q} pzas`).join(' &nbsp;·&nbsp; ');
+            preview.innerHTML = `<strong>📦 Contenido de la caja:</strong><br>${rows}`;
+            preview.style.display = 'block';
+        });
+
         // Load recent entries on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadRecentEntries();
+            loadConteoCajas();
         });
 
         // Focus barcode input on Enter key from quantity input

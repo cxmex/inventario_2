@@ -872,7 +872,8 @@ async def get_entrada_mercancia_2_form(request: Request):
 async def process_entrada_mercancia_2(
     request: Request,
     qty: int = Form(...),
-    barcode: str = Form(...)
+    barcode: str = Form(...),
+    conteo_previo_caja: Optional[int] = Form(None)
 ):
     """Process merchandise entry form and save to entrada_mercancia_2 / update terex2"""
     try:
@@ -923,6 +924,8 @@ async def process_entrada_mercancia_2(
                 entrada_data["estilo"] = product_info.get("name", "")
             if product_info.get("estilo_id"):
                 entrada_data["estilo_id"] = product_info.get("estilo_id")
+        if conteo_previo_caja is not None:
+            entrada_data["conteo_previo_caja"] = conteo_previo_caja
 
         print(f"Inserting entrada_mercancia_2 data: {entrada_data}", flush=True)
 
