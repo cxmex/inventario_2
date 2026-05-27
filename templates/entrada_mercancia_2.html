@@ -326,8 +326,10 @@
                 pending.forEach(c => {
                     const opt = document.createElement('option');
                     opt.value = c.caja_numero;
-                    const fecha = c.fecha ? c.fecha.slice(5).replace('-','/') : '';
-                    opt.textContent = `Caja #${c.caja_numero} — ${fecha} · ${c.total} pzas`;
+                    const fecha = c.fecha || '';
+                    const lineas = c.items ? c.items.length : '?';
+                    const status = c.reconciled ? 'VERIFICADO' : 'PENDIENTE';
+                    opt.textContent = `CAJA ${c.caja_numero} — ${fecha} · ${lineas} líneas · ${c.total} pzas · ${status}`;
                     opt.dataset.items = JSON.stringify(c.items);
                     sel.appendChild(opt);
                 });

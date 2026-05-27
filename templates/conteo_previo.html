@@ -230,7 +230,8 @@
     <div class="field-row">
       <div class="field">
         <label>No. Caja</label>
-        <input id="caja-num" type="number" placeholder="8" min="1"/>
+        <input id="caja-num" type="number" placeholder="8" min="1" max="999"
+               oninput="if(this.value>999||this.value.toString().length>3){this.value='';this.style.borderColor='#ef4444';setTimeout(()=>this.style.borderColor='',1500);alert('⚠️ Número de caja inválido — puede que el escáner haya llenado este campo. Ingresa solo el número de caja (ej. 8).');}else{this.style.borderColor='';}"/>
       </div>
       <div class="field">
         <label>Fecha</label>
