@@ -1322,6 +1322,65 @@ async def upload_barcode_photo2(
 
 
 # ── CONTEO PREVIO DE MERCANCÍA ─────────────────────────────────────
+@app.get("/api/counting-progress")
+async def counting_progress_t2():
+    """Return weekly counting progress for Sucursal 2 (terex2)."""
+    try:
+        from datetime import timedelta
+        import pytz as _pytz
+        tz = _pytz.timezone("America/Mexico_City")
+        now = datetime.now(tz)
+        monday = now - timedelta(days=now.weekday())
+        monday_iso = monday.strftime("%Y-%m-%dT00:00:00")
+        yesterday_str = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        days_es = ["Lunes","Martes","Miércoles","Jueves","Viernes","Sábado","Domingo"]
+
+        r_total = requests.get(
+            f"{SUPABASE_URL}/rest/v1/inventario1?terex2=gt.0&select=barcode",
+            headers={**HEADERS, "Prefer": "count=exact", "Range": "0-0"},
+        )
+        cr = r_total.headers.get("Content-Range", "0-0/0")
+        total = int(cr.split("/")[-1]) if "/" in cr else 0
+
+        r_hist = requests.get(
+            f"{SUPABASE_URL}/rest/v1/terex2_history"
+            f"?created_at=gte.{monday_iso}&select=barcode,created_at&limit=5000",
+            headers=HEADERS,
+        )
+        history = r_hist.json() if r_hist.status_code == 200 else []
+
+        seen_week = set()
+        seen_yesterday = set()
+        daily = {d: set() for d in days_es}
+        for row in history:
+            bc = str(row["barcode"])
+            dt = row["created_at"][:10]
+            seen_week.add(bc)
+            if dt == yesterday_str:
+                seen_yesterday.add(bc)
+            try:
+                idx = datetime.fromisoformat(row["created_at"].replace("Z","")).weekday()
+                daily[days_es[idx]].add(bc)
+            except: pass
+
+        counted = len(seen_week)
+        pct = round(counted / total * 100, 1) if total else 0
+        return {
+            "branch": "terex2",
+            "week_start": monday.strftime("%d/%m/%Y"),
+            "today": now.strftime("%d/%m/%Y"),
+            "today_name": days_es[now.weekday()],
+            "total": total,
+            "counted": counted,
+            "yesterday": len(seen_yesterday),
+            "remaining": max(total - counted, 0),
+            "pct": pct,
+            "daily": {d: len(s) for d, s in daily.items()},
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @app.get("/conteo-previo", response_class=HTMLResponse)
 async def conteo_previo_page2(request: Request):
     return templates.TemplateResponse(request=request, name="conteo_previo.html", context={})

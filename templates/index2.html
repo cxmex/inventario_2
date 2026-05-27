@@ -258,6 +258,75 @@
         }
 
         loadPendientes();
+        initConteoNotifications();
+
+        /* ── CONTEO NOTIFICATION (Sucursal 2) ── */
+        async function fetchConteoProgress() {
+            try {
+                const res = await fetch('/api/counting-progress');
+                if (!res.ok) return null;
+                return await res.json();
+            } catch(e) { return null; }
+        }
+
+        async function initConteoNotifications() {
+            const d = await fetchConteoProgress();
+            if (!d) return;
+            showConteoBanner(d);
+            if ('Notification' in window) {
+                const perm = Notification.permission === 'default'
+                    ? await Notification.requestPermission()
+                    : Notification.permission;
+                if (perm === 'granted') showBrowserNotification(d);
+            }
+            setInterval(async () => {
+                const fresh = await fetchConteoProgress();
+                if (fresh) {
+                    showConteoBanner(fresh);
+                    if (Notification.permission === 'granted') showBrowserNotification(fresh);
+                }
+            }, 20 * 60 * 1000);
+        }
+
+        function showBrowserNotification(d) {
+            const title = `📦 Conteo S2 — ${d.pct}% completado`;
+            const body = `Ayer: ${d.yesterday} SKUs contados. Faltan ${d.remaining} códigos para terminar la semana.`;
+            try { new Notification(title, { body, tag: 'conteo-s2' }); } catch(e) {}
+        }
+
+        function showConteoBanner(d) {
+            let el = document.getElementById('conteo-banner');
+            if (!el) {
+                el = document.createElement('div');
+                el.id = 'conteo-banner';
+                el.style.cssText = `background:#e8f5e9;border:1px solid #a5d6a7;border-radius:12px;
+                    padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;
+                    justify-content:space-between;flex-wrap:wrap;gap:10px;`;
+                const container = document.querySelector('.container');
+                const firstChild = container.firstElementChild;
+                container.insertBefore(el, firstChild);
+            }
+            const pctColor = d.pct >= 80 ? '#1b5e20' : d.pct >= 50 ? '#e65100' : '#c62828';
+            el.innerHTML = `
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <span style="font-size:1.8rem">📦</span>
+                    <div>
+                        <div style="font-weight:700;color:#2e7d32;font-size:1rem;">Conteo Semanal — Sucursal 2</div>
+                        <div style="font-size:0.82rem;color:#1b5e20;">
+                            Ayer: <b>${d.yesterday}</b> SKUs contados &nbsp;·&nbsp;
+                            Faltan <b>${d.remaining}</b> códigos esta semana
+                        </div>
+                        <div style="font-size:0.78rem;color:#555;margin-top:3px;">
+                            ${Object.entries(d.daily).filter(([,v])=>v>0).map(([k,v])=>`${k}: ${v}`).join(' &nbsp;|&nbsp; ') || 'Sin conteos esta semana'}
+                        </div>
+                    </div>
+                </div>
+                <div style="text-align:right;flex-shrink:0;">
+                    <div style="font-size:1.6rem;font-weight:700;color:${pctColor};">${d.pct}%</div>
+                    <div style="font-size:0.75rem;color:#555;">${d.counted} / ${d.total} SKUs</div>
+                    <a href="/check_barcode_mobile2" style="font-size:0.75rem;color:#1565C0;font-weight:600;">→ Ir a contar</a>
+                </div>`;
+        }
     </script>
 </body>
 </html>
