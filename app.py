@@ -55,11 +55,20 @@ STORE_ID = "terex2"
 INVENTORY_COL = "terex2"         # column in inventario1
 VENTAS_TABLE = "ventas_terex2"   # sales table
 
+# ── Backup / failover mode ──
+IS_BACKUP = os.environ.get("IS_BACKUP", "").lower() in ("true", "1", "yes")
+
 # ─────────────────────────────────────────────
 # APP & ROUTER
 # ─────────────────────────────────────────────
 app = FastAPI(title="Nota Terex2")
 router = APIRouter()
+
+
+@app.get("/health")
+async def health_check():
+    """Health endpoint for failover proxy."""
+    return {"status": "ok", "mode": "backup" if IS_BACKUP else "primary", "store": STORE_ID}
 
 
 # ─────────────────────────────────────────────

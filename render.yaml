@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: fundastock-terex2-backup
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: IS_BACKUP
+        value: "true"
+      - key: PYTHON_VERSION
+        value: "3.12.0"
