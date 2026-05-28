@@ -732,7 +732,7 @@ async def api_save(payload: SavePayload):
             method="GET",
             endpoint="/rest/v1/inventario1",
             params={
-                "select": f"modelo,modelo_id,estilo,estilo_id,{INVENTORY_COL}",
+                "select": f"modelo,modelo_id,estilo,estilo_id,{INVENTORY_COL},precio",
                 "barcode": f"eq.{codigo}",
                 "limit": "1",
             },
@@ -744,12 +744,40 @@ async def api_save(payload: SavePayload):
             )
         inv = inv_rows[0]
 
+        # ── $0 price guard: never sell at $0 ─────────────────────────────
+        sale_price = p_dict.get("price", 0) or 0
+        if sale_price <= 0:
+            catalog_price = inv.get("precio") or 0
+            if catalog_price > 0:
+                sale_price = catalog_price
+                print(f"🚨 $0 price corrected → ${catalog_price} for {p_dict.get('name','')} ({codigo})")
+            else:
+                sale_price = 90
+                try:
+                    await supabase_request(
+                        method="PATCH",
+                        endpoint=f"/rest/v1/inventario1?barcode=eq.{codigo}",
+                        json_data={"precio": 90},
+                    )
+                except Exception:
+                    pass
+                print(f"🚨 $0 price with no catalog price — defaulted to $90 for {p_dict.get('name','')} ({codigo})")
+            try:
+                send_telegram_message(
+                    f"🚨 ARGOS · Venta a $0 corregida (S2)\n"
+                    f"Producto: {p_dict.get('name', '?')}\n"
+                    f"Código: {codigo}\n"
+                    f"Precio aplicado: ${sale_price}"
+                )
+            except Exception:
+                pass
+
         # Insert sale record
         record = {
             "qty": p_dict.get("qty", 1),
             "name": p_dict.get("name", ""),
             "name_id": codigo,
-            "price": p_dict.get("price", 0),
+            "price": sale_price,
             "fecha": fecha,
             "hora": hora,
             "order_id": next_order_id,
@@ -777,8 +805,8 @@ async def api_save(payload: SavePayload):
         items_for_ticket.append({
             "qty": p_dict.get("qty", 1),
             "name": p_dict.get("name", ""),
-            "price": p_dict.get("price", 0),
-            "subtotal": p_dict.get("qty", 1) * p_dict.get("price", 0),
+            "price": sale_price,
+            "subtotal": p_dict.get("qty", 1) * sale_price,
         })
 
     total = sum(i["subtotal"] for i in items_for_ticket)
@@ -1568,6 +1596,52 @@ async def upload_conteo_foto2(
         upload_url = f"{SUPABASE_URL}/storage/v1/object/barcode-photos/{storage_path}"
         requests.post(upload_url, headers={**HEADERS, "Content-Type": photo.content_type or "image/jpeg"}, data=contents)
         return {"success": True}
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@app.get("/api/inventory/variance-by-estilo")
+async def variance_by_estilo_t2(limit: int = 10):
+    """Top estilos by absolute variance from last week's terex2 history."""
+    try:
+        import pytz as _pytz
+        from datetime import timedelta
+        tz = _pytz.timezone("America/Mexico_City")
+        now = datetime.now(tz)
+        last_monday = now - timedelta(days=now.weekday() + 7)
+        last_sunday  = last_monday + timedelta(days=6)
+        from_iso = last_monday.strftime("%Y-%m-%dT00:00:00")
+        to_iso   = last_sunday.strftime("%Y-%m-%dT23:59:59")
+
+        r_hist = requests.get(
+            f"{SUPABASE_URL}/rest/v1/terex2_history"
+            f"?created_at=gte.{from_iso}&created_at=lte.{to_iso}"
+            "&select=barcode,product_name,difference,qty_before,qty_counted&limit=5000",
+            headers=HEADERS,
+        )
+        r_inv = requests.get(
+            f"{SUPABASE_URL}/rest/v1/inventario1?select=barcode,estilo&limit=5000",
+            headers=HEADERS,
+        )
+        rows = r_hist.json() if r_hist.status_code == 200 else []
+        inv  = r_inv.json()  if r_inv.status_code  == 200 else []
+
+        bc_to_estilo = {str(r["barcode"]): (r.get("estilo") or "Sin estilo") for r in inv}
+
+        from collections import defaultdict
+        estilo_stats = defaultdict(lambda: {"abs_diff": 0, "net_diff": 0, "counts": 0, "pos": 0, "neg": 0})
+        for r in rows:
+            bc = str(r["barcode"])
+            estilo = bc_to_estilo.get(bc) or r.get("product_name") or "Sin estilo"
+            diff = r.get("difference") or 0
+            estilo_stats[estilo]["abs_diff"] += abs(diff)
+            estilo_stats[estilo]["net_diff"] += diff
+            estilo_stats[estilo]["counts"]   += 1
+            if diff > 0: estilo_stats[estilo]["pos"] += 1
+            if diff < 0: estilo_stats[estilo]["neg"] += 1
+
+        top = sorted(estilo_stats.items(), key=lambda x: x[1]["abs_diff"], reverse=True)[:limit]
+        return [{"estilo": k, **v} for k, v in top]
     except Exception as e:
         return JSONResponse({"error": str(e)}, status_code=500)
 
