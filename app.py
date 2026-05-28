@@ -1572,6 +1572,49 @@ async def upload_conteo_foto2(
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@app.get("/api/inventory/error-rate")
+async def inventory_error_rate_t2():
+    """Last-week error rate for Terex2: discrepancy between system qty and physical count."""
+    try:
+        import pytz as _pytz
+        from datetime import timedelta
+        tz = _pytz.timezone("America/Mexico_City")
+        now = datetime.now(tz)
+        last_monday = now - timedelta(days=now.weekday() + 7)
+        last_sunday  = last_monday + timedelta(days=6)
+        from_iso = last_monday.strftime("%Y-%m-%dT00:00:00")
+        to_iso   = last_sunday.strftime("%Y-%m-%dT23:59:59")
+
+        resp = requests.get(
+            f"{SUPABASE_URL}/rest/v1/terex2_history"
+            f"?created_at=gte.{from_iso}&created_at=lte.{to_iso}"
+            "&select=qty_before,qty_counted,matches,difference&limit=5000",
+            headers=HEADERS,
+        )
+        rows = resp.json() if resp.status_code == 200 else []
+
+        total_skus    = len(rows)
+        error_skus    = sum(1 for r in rows if not r.get("matches"))
+        total_counted = sum(r.get("qty_counted", 0) or 0 for r in rows)
+        total_diff    = sum(abs(r.get("difference", 0) or 0) for r in rows)
+        net_diff      = sum((r.get("difference", 0) or 0) for r in rows)
+        error_rate    = round(total_diff / total_counted * 100, 1) if total_counted else 0
+
+        return {
+            "branch":        "terex2",
+            "week_from":     last_monday.strftime("%d/%m/%Y"),
+            "week_to":       last_sunday.strftime("%d/%m/%Y"),
+            "total_skus":    total_skus,
+            "error_skus":    error_skus,
+            "total_counted": total_counted,
+            "total_diff":    total_diff,
+            "net_diff":      net_diff,
+            "error_rate":    error_rate,
+        }
+    except Exception as e:
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 # ENTRYPOINT
 # ─────────────────────────────────────────────
 if __name__ == "__main__":

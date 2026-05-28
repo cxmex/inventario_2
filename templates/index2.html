@@ -259,6 +259,49 @@
 
         loadPendientes();
         initConteoNotifications();
+        loadErrorRate();
+
+        /* ── ERROR RATE (Semana Pasada) ── */
+        async function loadErrorRate() {
+            try {
+                const res = await fetch('/api/inventory/error-rate');
+                if (!res.ok) return;
+                const d = await res.json();
+                if (d.total_skus === 0) return;
+
+                const rateColor = d.error_rate <= 5 ? '#1b5e20' : d.error_rate <= 15 ? '#e65100' : '#b71c1c';
+                const rateBg    = d.error_rate <= 5 ? '#e8f5e9' : d.error_rate <= 15 ? '#fff3e0' : '#ffebee';
+                const rateBd    = d.error_rate <= 5 ? '#a5d6a7' : d.error_rate <= 15 ? '#ffcc80' : '#ef9a9a';
+
+                let el = document.getElementById('error-rate-banner');
+                if (!el) {
+                    el = document.createElement('div');
+                    el.id = 'error-rate-banner';
+                    const container = document.querySelector('.container');
+                    container.insertBefore(el, container.firstElementChild);
+                }
+                el.style.cssText = `background:${rateBg};border:1px solid ${rateBd};border-radius:12px;padding:14px 18px;margin-bottom:16px;`;
+                el.innerHTML = `
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;">
+                        <div style="display:flex;align-items:center;gap:12px;">
+                            <span style="font-size:1.8rem">📊</span>
+                            <div>
+                                <div style="font-weight:700;color:${rateColor};font-size:1rem;">Tasa de Error — Semana Pasada (S2)</div>
+                                <div style="font-size:0.82rem;color:${rateColor};">
+                                    ${d.week_from} – ${d.week_to} &nbsp;·&nbsp;
+                                    ${d.error_skus} / ${d.total_skus} SKUs con diferencia &nbsp;·&nbsp;
+                                    ${d.total_diff} pzas de discrepancia
+                                </div>
+                                <div style="font-size:0.78rem;color:#777;margin-top:2px;">
+                                    Neto: ${d.net_diff > 0 ? '+' : ''}${d.net_diff} pzas
+                                    (${d.net_diff > 0 ? 'más en físico que en sistema' : d.net_diff < 0 ? 'menos en físico que en sistema' : 'sin diferencia neta'})
+                                </div>
+                            </div>
+                        </div>
+                        <div style="font-size:2rem;font-weight:800;color:${rateColor};">${d.error_rate}%</div>
+                    </div>`;
+            } catch(e) {}
+        }
 
         /* ── CONTEO NOTIFICATION (Sucursal 2) ── */
         async function fetchConteoProgress() {
