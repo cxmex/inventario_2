@@ -301,9 +301,20 @@
         saveMsg.className = 'status error';
         return;
       }
-      
+
+      // Check for $0 prices
+      const zeroItems = products.filter(p => !p.price || p.price <= 0);
+      if (zeroItems.length > 0) {
+        const names = zeroItems.map(p => p.name || p.codigo).join(', ');
+        if (!confirm(`⚠️ Hay mercancia con $0 en el precio:\n\n${names}\n\n¿Estas seguro que la quieres vender gratis?`)) {
+          saveMsg.textContent = 'Corrige los precios antes de guardar';
+          saveMsg.className = 'status error';
+          return;
+        }
+      }
+
       const paymentMethod = document.querySelector('input[name="payment-method"]:checked').value;
-      
+
       saveBtn.disabled = true;
       saveMsg.textContent = 'Guardando...';
       saveMsg.className = 'status';
